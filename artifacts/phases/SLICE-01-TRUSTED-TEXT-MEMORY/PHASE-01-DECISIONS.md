@@ -47,6 +47,7 @@ Result: fixed by `ec9e78128e19742ba856fc5d95df014229a934c3` and covered by compo
 Reviewed code HEAD: `07a41381f7bc47d9f048f90f3b36fcc6f85e03d1`.
 
 MESTRE review result:
+
 - Critical open: `0`
 - Important open: `0`
 
