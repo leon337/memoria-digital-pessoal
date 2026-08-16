@@ -1,0 +1,35 @@
+mission_id: MDP-001
+phase_id: SLICE-01
+title: Trusted Text Memory
+risk_class: B
+state: IN_REVIEW_READY_FOR_GATE
+branch: slice/01-trusted-text-memory
+pull_request:
+  number: 2
+  state: OPEN
+  merged: false
+reviewed_code_head: 07a41381f7bc47d9f048f90f3b36fcc6f85e03d1
+canonical_code_ci:
+  run_id: 31939889153
+  job_id: 95147424876
+  conclusion: success
+findings:
+  critical_open: 0
+  important_open: 0
+  important_fixed: 2
+data_boundary:
+  synthetic_only: true
+  real_sensitive_data_authorized: false
+next_slice:
+  slice_02_authorized: false
+evidence:
+  project: docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md
+  phase: docs/phases/SLICE-01.md
+  checkpoint: docs/checkpoints/MDP-SLICE-01-CHECKPOINT-001.md
+audit:
+  mestre_technical_review: completed
+  independent_mcf_audit: pending_gate
+  independent_audit_simulated: false
+blockers: []
+next_action: perform governed Slice 01 gate process without merging first
+checkpoint_recipient: Slice 01 gate

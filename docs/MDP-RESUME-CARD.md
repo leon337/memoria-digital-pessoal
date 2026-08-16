@@ -7,46 +7,40 @@
 - Orchestrator: MESTRE
 - Official repository: `leon337/memoria-digital-pessoal`
 - Default branch: `main`
-- Active Slice 01 branch: `slice/01-trusted-text-memory`
+- Active branch: `slice/01-trusted-text-memory`
 - Visibility: `private`
 
 ## Current state
 
-- Product Discovery Q1–Q16: COMPLETE
-- Conceptual Architecture Q1–Q16: COMPLETE
-- TECH-01 Q1–Q16: COMPLETE
-- PLAN-01 Q1–Q16: COMPLETE
+- Product Discovery: COMPLETE
+- Conceptual Architecture: COMPLETE
+- TECH-01: COMPLETE
+- PLAN-01: COMPLETE
 - BOOT-01: COMPLETE
 - FOUNDATION: COMPLETE
-- PR #1: MERGED
-- Slice 01: AUTHORIZED / DESIGN APPROVED / PLAN READY / IMPLEMENTATION NOT STARTED
+- Slice 01: IMPLEMENTED / VALIDATED / IN_REVIEW / READY_FOR_GATE / NOT MERGED / NOT COMPLETE
 - Real sensitive data: NOT AUTHORIZED
 - Pilot: NOT AUTHORIZED
 - Slice 02: NOT STARTED / NOT AUTHORIZED
 
-## SLICE 01 gate and design
+## Slice 01 checkpoint
 
-- HUMAN_GATE to enter Slice 01: APPROVED by LEANDRO on `2026-08-16`
-- Approved approach: `A — Deterministic Textual Fact`
-- Design approval: APPROVED by LEANDRO on `2026-08-16`
-- Written spec approval: APPROVED by LEANDRO on `2026-08-16`
-- Design: `docs/superpowers/specs/2026-08-16-slice-01-trusted-text-memory-design.md`
-- Implementation plan: `docs/superpowers/plans/2026-08-16-slice-01-trusted-text-memory-implementation.md`
-- Implementation has not started yet.
-
-## FOUNDATION evidence
-
-- Reviewed code HEAD: `57341c228cb3303b55d1a4ff7a7dff690f97e546`
-- Canonical code verification CI run: `31935826287` — PASS
-- Final pre-merge docs-state CI run: `31935954525` — PASS
-- HUMAN_GATE: APPROVED by LEANDRO on `2026-08-16`
-- Merge commit: `47a5d6fc0c02638531861a65be7bd2406575415a`
-- Post-merge `main` CI run: `31936579159` — PASS
-- Evidence file: `docs/evidence/foundation/FOUNDATION-EVIDENCE-001.md`
+- Entry authorization: APPROVED by LEANDRO on `2026-08-16`
+- Approach: `A — Deterministic Textual Fact`
+- Design/spec: APPROVED by LEANDRO
+- Execution mode: inline
+- PR: `#2 — SLICE 01: trusted text memory` — OPEN / NOT MERGED
+- Reviewed code HEAD: `07a41381f7bc47d9f048f90f3b36fcc6f85e03d1`
+- Canonical code CI: `31939889153` — PASS
+- Evidence: `docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md`
+- Checkpoint: `docs/checkpoints/MDP-SLICE-01-CHECKPOINT-001.md`
+- PRF: `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/`
+- Open Critical: `0`
+- Open Important: `0`
+- Independent MCF audit: pending as gate input; not simulated
 
 ## Recovery order
 
-Read in this order:
 1. `docs/STATE.md`
 2. `docs/governance/MDP-GOVERNANCE-001.md`
 3. `docs/decisions/MDP-PRODUCT-DISCOVERY-001.md`
@@ -56,21 +50,21 @@ Read in this order:
 7. `docs/roadmaps/MDP-IMPLEMENTATION-ROADMAP-001.md`
 8. `docs/superpowers/specs/2026-08-16-slice-01-trusted-text-memory-design.md`
 9. `docs/superpowers/plans/2026-08-16-slice-01-trusted-text-memory-implementation.md`
-10. `docs/evidence/README.md`
-11. latest file in `docs/checkpoints/`
+10. `docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md`
+11. `docs/checkpoints/MDP-SLICE-01-CHECKPOINT-001.md`
+12. `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/README.md`
 
 ## Critical rules
 
-- Repository state is canonical when it can answer the question.
-- AI is not autobiographical truth.
 - Evidence and Ledger are canonical; projections are reconstructible.
 - No silent overwrite of originals or conflicts.
-- Lack of evidence means UNKNOWN.
-- Slice 01 uses only synthetic, non-sensitive data.
+- Lack of matching evidence means `UNKNOWN`.
+- AI is not autobiographical truth.
+- Slice 01 uses synthetic, non-sensitive laboratory data only.
 - Real sensitive data requires Pilot Readiness plus explicit HUMAN_GATE by LEANDRO.
-- Slice 01 authorization does not authorize merge/completion or Slice 02.
-- Green CI alone does not authorize the next gate.
+- Green CI does not authorize merge or the next slice.
+- Slice 01 remains incomplete until its applicable gate closes it.
 
 ## Next action
 
-Execute the approved Slice 01 implementation plan task-by-task. Stop at `IN_REVIEW / READY_FOR_GATE`; do not merge or use real sensitive data without the required future gate.
+Enter the governed Slice 01 gate process. Keep PR #2 unmerged until that gate authorizes integration.
