@@ -10,7 +10,9 @@ async function lintDomain(source: string) {
 
 describe('architecture lint', () => {
   it('rejects Prisma imports from domain', async () => {
-    const result = await lintDomain("import { PrismaClient } from '@prisma/client';\nexport {};");
+    const result = await lintDomain(
+      "import { PrismaClient } from '@prisma/client';\nexport {};",
+    );
 
     expect(result?.messages.some((message) => message.ruleId === 'no-restricted-imports')).toBe(
       true,
@@ -18,7 +20,9 @@ describe('architecture lint', () => {
   });
 
   it('rejects Node platform imports from domain', async () => {
-    const result = await lintDomain("import { readFile } from 'node:fs/promises';\nexport { readFile };");
+    const result = await lintDomain(
+      "import { readFile } from 'node:fs/promises';\nexport { readFile };",
+    );
 
     expect(result?.messages.some((message) => message.ruleId === 'no-restricted-imports')).toBe(
       true,
