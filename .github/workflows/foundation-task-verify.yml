@@ -36,16 +36,11 @@ jobs:
         run: |
           count="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations';")"
           test "$count" = "0"
-      - run: pnpm --filter @mdp/shared test
-      - run: pnpm -r --filter './packages/*' typecheck
-      - run: pnpm build:packages
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test
+      - run: pnpm build
       - run: pnpm --filter @mdp/shared exec node -e "import('@mdp/shared').then(m=>{if(!m.createId || m.createId()[14]!=='7') process.exit(1)})"
-      - run: pnpm --filter @mdp/web test
-      - run: pnpm --filter @mdp/web typecheck
-      - run: pnpm --filter @mdp/web build
-      - run: pnpm --filter @mdp/api test
-      - run: pnpm --filter @mdp/api test:integration
-      - run: pnpm --filter @mdp/api typecheck
-      - run: pnpm --filter @mdp/api build
       - if: always()
         run: docker compose down
