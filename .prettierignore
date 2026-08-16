@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+playwright-report
+test-results
+apps/api/src/infrastructure/persistence/prisma/generated
+docs
+pnpm-lock.yaml
