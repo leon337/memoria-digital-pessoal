@@ -14,9 +14,7 @@ test('stores and retrieves a trusted text memory with provenance and UNKNOWN fal
     'Use somente dados sintéticos',
   );
 
-  await page
-    .getByRole('textbox', { name: 'Lembrança' })
-    .fill('Minha irmã se chama Ana.');
+  await page.getByRole('textbox', { name: 'Lembrança' }).fill('Minha irmã se chama Ana.');
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByText('Lembrança guardada.')).toBeVisible();
 
