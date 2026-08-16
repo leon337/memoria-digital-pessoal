@@ -16,9 +16,7 @@ async function dependencies(path: string): Promise<string[]> {
 describe('Slice 01 scope invariants', () => {
   it('contains exactly the five authorized product models', async () => {
     const schema = await text('prisma/schema.prisma');
-    const models = [...schema.matchAll(/^model\s+(\w+)\s+\{/gm)]
-      .map((match) => match[1])
-      .sort();
+    const models = [...schema.matchAll(/^model\s+(\w+)\s+\{/gm)].map((match) => match[1]).sort();
 
     expect(models).toEqual(['CurrentFact', 'Evidence', 'Fact', 'LedgerEvent', 'Memory']);
   });
