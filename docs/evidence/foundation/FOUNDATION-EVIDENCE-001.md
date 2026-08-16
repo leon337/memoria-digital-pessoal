@@ -102,10 +102,20 @@ Open Important findings: `0`.
 - Minor CI-maintenance warning: GitHub runner reports Node-runtime deprecation warnings for `actions/checkout@v4` and `actions/setup-node@v4`; the runner forces those actions onto Node 24 and the workflow passed. Track as future maintenance, not a FOUNDATION blocker.
 - pnpm reports Prisma install scripts as ignored under pnpm 10's build-script policy; explicit `prisma validate`, `prisma generate`, migration, integration, build and runtime checks all passed in the canonical run.
 
+## Final readiness and gate evidence
+
+- Subsequent docs/state commit HEAD: `a1bcd3e61ec0e0c499a5e6b137c3d1a1740783af`.
+- Final pre-merge docs-state CI run: `31935954525` — PASS.
+- HUMAN_GATE: explicitly APPROVED by LEANDRO on `2026-08-16`.
+- Gate authorization was recorded in the PR conversation before merge.
+- PR #1 merge commit: `47a5d6fc0c02638531861a65be7bd2406575415a`.
+- Post-merge `main` CI run: `31936579159` — PASS.
+- Post-merge CI re-proved install, PostgreSQL health, Prisma validation/generation/migration, zero product tables, typecheck, lint, format, tests, build, workspace import, Playwright E2E and real PostgreSQL degradation behavior.
+
 ## Evidence assessment
 
-All executable technical criteria of the Foundation Readiness Gate were demonstrated successfully on reviewed code HEAD `57341c228cb3303b55d1a4ff7a7dff690f97e546` by CI run `31935826287`.
+All executable technical criteria of the Foundation Readiness Gate were demonstrated successfully. Independent review blockers were resolved, final pre-merge CI passed, LEANDRO explicitly authorized the gate, PR #1 was merged, and post-merge `main` CI passed.
 
-A subsequent docs/state commit must also pass canonical CI before a final READY recommendation is presented.
+FOUNDATION is `COMPLETE`.
 
-FOUNDATION remains `IN_REVIEW`; merge and completion require explicit LEANDRO approval.
+`Slice 01 — Trusted Text Memory` remains `NOT STARTED / NOT AUTHORIZED` until a separate explicit authorization from LEANDRO.

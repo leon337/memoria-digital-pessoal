@@ -17,8 +17,8 @@
 - PLAN-01 Q1–Q16: COMPLETE
 - PLAN-01 consolidation: COMPLETE
 - BOOT-01: COMPLETE
-- FOUNDATION: IN_REVIEW
-- PR #1: OPEN / awaiting Foundation Readiness human gate
+- FOUNDATION: COMPLETE
+- PR #1: MERGED
 - Slice 01: NOT STARTED / NOT AUTHORIZED
 - Real sensitive data: NOT AUTHORIZED
 - Pilot: NOT AUTHORIZED
@@ -26,7 +26,11 @@
 ## FOUNDATION evidence
 
 - Reviewed code HEAD: `57341c228cb3303b55d1a4ff7a7dff690f97e546`
-- Canonical CI run: `31935826287` — PASS
+- Canonical code verification CI run: `31935826287` — PASS
+- Final pre-merge docs-state CI run: `31935954525` — PASS
+- HUMAN_GATE: APPROVED by LEANDRO on `2026-08-16`
+- Merge commit: `47a5d6fc0c02638531861a65be7bd2406575415a`
+- Post-merge `main` CI run: `31936579159` — PASS
 - Evidence file: `docs/evidence/foundation/FOUNDATION-EVIDENCE-001.md`
 - Open Critical findings: `0`
 - Open Important findings: `0`
@@ -54,9 +58,9 @@ Read in this order:
 - No silent overwrite of originals or conflicts.
 - Lack of evidence means UNKNOWN.
 - Real sensitive data requires Pilot Readiness plus explicit HUMAN_GATE by LEANDRO.
-- FOUNDATION CI success does not authorize Slice 01.
-- PR #1 must not be merged without explicit LEANDRO approval.
+- FOUNDATION completion does not authorize Slice 01.
+- Slice 01 requires a separate explicit authorization from LEANDRO.
 
 ## Next decision
 
-LEANDRO reviews the Foundation Readiness Gate and either authorizes merge of PR #1 or requests changes. Slice 01 remains blocked regardless until separately authorized.
+LEANDRO decides whether to authorize the next boundary: `Slice 01 — Trusted Text Memory`. Until that gate is granted, Slice 01 remains blocked.

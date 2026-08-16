@@ -6,7 +6,7 @@
 
 ## Current phase
 
-`FOUNDATION — IN_REVIEW`
+`FOUNDATION — COMPLETE`
 
 ## Status
 
@@ -17,7 +17,7 @@
 | TECH-01 | COMPLETE |
 | PLAN-01 | COMPLETE |
 | BOOT-01 | COMPLETE |
-| FOUNDATION | IN_REVIEW |
+| FOUNDATION | COMPLETE |
 | Slice 01 | NOT STARTED / NOT AUTHORIZED |
 | Real data | NOT AUTHORIZED |
 | Pilot | NOT AUTHORIZED |
@@ -28,24 +28,30 @@
 - Orchestrator: MESTRE
 - HUMAN_GATE belongs exclusively to LEANDRO.
 - Repository state is canonical when it can answer the project-state question.
-- A green CI does not itself authorize merge or the next product slice.
+- A green CI does not itself authorize the next product slice.
 
-## FOUNDATION review state
+## FOUNDATION completion evidence
 
 - Branch: `foundation/repository-bootstrap`
-- Pull request: `#1 — FOUNDATION: repository and product bootstrap`
+- Pull request: `#1 — FOUNDATION: repository and product bootstrap` — MERGED
 - Reviewed code HEAD: `57341c228cb3303b55d1a4ff7a7dff690f97e546`
-- Canonical CI run `31935826287`: PASS
+- Canonical code verification CI run `31935826287`: PASS
+- Final pre-merge docs-state CI run `31935954525`: PASS
 - Evidence: `docs/evidence/foundation/FOUNDATION-EVIDENCE-001.md`
+- HUMAN_GATE: APPROVED by LEANDRO on `2026-08-16`
+- Merge commit: `47a5d6fc0c02638531861a65be7bd2406575415a`
+- Post-merge `main` CI run `31936579159`: PASS
 - Open Critical review findings: `0`
 - Open Important review findings: `0`
 
-FOUNDATION implementation and technical verification have reached review readiness, but FOUNDATION is not COMPLETE until LEANDRO explicitly approves the gate/merge.
+FOUNDATION is complete. Human authorization, merge, and post-merge verification are evidenced.
 
 ## Current boundary
 
-Do not start Slice 01 and do not use real sensitive data.
+FOUNDATION is closed.
+
+Do not start Slice 01 and do not use real sensitive data without a new explicit authorization from LEANDRO.
 
 ## Next decision
 
-Foundation Readiness Gate / merge authorization by LEANDRO.
+`Slice 01 — Trusted Text Memory` requires a new explicit HUMAN_GATE / authorization from LEANDRO before implementation begins.

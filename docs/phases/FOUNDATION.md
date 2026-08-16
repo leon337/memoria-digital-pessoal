@@ -6,15 +6,19 @@
 
 ## Status
 
-`IN_REVIEW`
+`COMPLETE`
 
-## Branch and review
+## Branch, review and merge
 
 - Branch: `foundation/repository-bootstrap`
-- Pull request: `#1 — FOUNDATION: repository and product bootstrap`
+- Pull request: `#1 — FOUNDATION: repository and product bootstrap` — MERGED
 - Reviewed code HEAD: `57341c228cb3303b55d1a4ff7a7dff690f97e546`
 - Canonical verification run: GitHub Actions `CI` run `31935826287`
 - Verification job: `95137467702`
+- Final pre-merge docs-state CI: `31935954525` — PASS
+- HUMAN_GATE: APPROVED by LEANDRO on `2026-08-16`
+- Merge commit: `47a5d6fc0c02638531861a65be7bd2406575415a`
+- Post-merge `main` CI: `31936579159` — PASS
 
 ## Scope delivered
 
@@ -58,14 +62,19 @@ Independent review found two Important issues before readiness:
 
 Both findings were fixed before the successful canonical CI run.
 
+Open Critical findings: `0`.
+Open Important findings: `0`.
+
 ## Residual finding
 
 - Minor / maintenance: GitHub Actions logs warn that `actions/checkout@v4` and `actions/setup-node@v4` target the deprecated Node 20 action runtime and are currently forced to run on Node 24 by the runner. This did not affect the verified workflow result and does not alter application runtime selection.
 
-## Current gate
+## Gate outcome
 
-Implementation and technical verification are complete, but FOUNDATION is **not yet COMPLETE**. It remains `IN_REVIEW` until LEANDRO explicitly approves the Foundation Readiness Gate and merge of PR #1.
+The Foundation Readiness Gate was explicitly approved by LEANDRO. PR #1 was merged into `main` at commit `47a5d6fc0c02638531861a65be7bd2406575415a`, and post-merge CI run `31936579159` completed successfully.
+
+FOUNDATION is therefore `COMPLETE`.
 
 ## Next boundary
 
-`Slice 01 — Trusted Text Memory` remains `NOT STARTED / NOT AUTHORIZED`.
+`Slice 01 — Trusted Text Memory` remains `NOT STARTED / NOT AUTHORIZED` and requires a separate explicit authorization from LEANDRO.
