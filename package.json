@@ -1,0 +1,37 @@
+{
+  "name": "memoria-digital-pessoal",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build:packages": "pnpm -r --filter './packages/*' --if-present build",
+    "typecheck": "pnpm build:packages && pnpm -r --filter './packages/*' --if-present typecheck && pnpm -r --filter './apps/*' --if-present typecheck",
+    "build": "pnpm build:packages && pnpm -r --filter './apps/*' --if-present build",
+    "test": "pnpm build:packages && vitest run",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "serve:e2e": "concurrently -k -n api,web \"pnpm --filter @mdp/api start\" \"pnpm --filter @mdp/web preview\"",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@playwright/test": "latest",
+    "concurrently": "latest",
+    "dotenv": "latest",
+    "eslint": "latest",
+    "globals": "latest",
+    "prettier": "latest",
+    "prisma": "latest",
+    "typescript": "6.0.3",
+    "typescript-eslint": "latest",
+    "vitest": "latest"
+  }
+}

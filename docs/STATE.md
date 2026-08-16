@@ -6,7 +6,7 @@
 
 ## Current phase
 
-`BOOT-01 — COMPLETE`
+`FOUNDATION — IN_REVIEW`
 
 ## Status
 
@@ -17,8 +17,8 @@
 | TECH-01 | COMPLETE |
 | PLAN-01 | COMPLETE |
 | BOOT-01 | COMPLETE |
-| Foundation implementation | NOT STARTED |
-| Product code | NOT STARTED |
+| FOUNDATION | IN_REVIEW |
+| Slice 01 | NOT STARTED / NOT AUTHORIZED |
 | Real data | NOT AUTHORIZED |
 | Pilot | NOT AUTHORIZED |
 
@@ -28,33 +28,24 @@
 - Orchestrator: MESTRE
 - HUMAN_GATE belongs exclusively to LEANDRO.
 - Repository state is canonical when it can answer the project-state question.
-- Implementation does not begin merely because planning/bootstrap is complete.
+- A green CI does not itself authorize merge or the next product slice.
 
-## BOOT-01 result
+## FOUNDATION review state
 
-BOOT-01 established:
-- official private repository;
-- canonical state document;
-- governance baseline;
-- Product Discovery decision lineage;
-- Conceptual Architecture decision lineage;
-- TECH-01 decision lineage;
-- PLAN-01 decision lineage;
-- implementation roadmap;
-- resume card and recovery order;
-- BOOT-01 phase record;
-- checkpoint convention.
+- Branch: `foundation/repository-bootstrap`
+- Pull request: `#1 — FOUNDATION: repository and product bootstrap`
+- Reviewed code HEAD: `57341c228cb3303b55d1a4ff7a7dff690f97e546`
+- Canonical CI run `31935826287`: PASS
+- Evidence: `docs/evidence/foundation/FOUNDATION-EVIDENCE-001.md`
+- Open Critical review findings: `0`
+- Open Important review findings: `0`
 
-Repository-only recovery has been validated by reading the canonical files back from GitHub.
+FOUNDATION implementation and technical verification have reached review readiness, but FOUNDATION is not COMPLETE until LEANDRO explicitly approves the gate/merge.
 
 ## Current boundary
 
-BOOT-01 is closed.
+Do not start Slice 01 and do not use real sensitive data.
 
-No product implementation is authorized yet.
+## Next decision
 
-## Next proposed boundary
-
-`FOUNDATION — Repository & Product Bootstrap`
-
-Starting FOUNDATION requires a new explicit authorization/gate from LEANDRO.
+Foundation Readiness Gate / merge authorization by LEANDRO.

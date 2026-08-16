@@ -17,10 +17,19 @@
 - PLAN-01 Q1–Q16: COMPLETE
 - PLAN-01 consolidation: COMPLETE
 - BOOT-01: COMPLETE
-- Foundation: NOT STARTED / NOT AUTHORIZED
-- Product implementation: NOT STARTED
+- FOUNDATION: IN_REVIEW
+- PR #1: OPEN / awaiting Foundation Readiness human gate
+- Slice 01: NOT STARTED / NOT AUTHORIZED
 - Real sensitive data: NOT AUTHORIZED
 - Pilot: NOT AUTHORIZED
+
+## FOUNDATION evidence
+
+- Reviewed code HEAD: `57341c228cb3303b55d1a4ff7a7dff690f97e546`
+- Canonical CI run: `31935826287` — PASS
+- Evidence file: `docs/evidence/foundation/FOUNDATION-EVIDENCE-001.md`
+- Open Critical findings: `0`
+- Open Important findings: `0`
 
 ## Recovery order
 
@@ -32,7 +41,10 @@ Read in this order:
 5. `docs/decisions/MDP-TECH-01-DECISIONS-001.md`
 6. `docs/decisions/MDP-PLAN-01-DECISIONS-001.md`
 7. `docs/roadmaps/MDP-IMPLEMENTATION-ROADMAP-001.md`
-8. latest file in `docs/checkpoints/`
+8. `docs/superpowers/specs/2026-08-16-foundation-design.md`
+9. `docs/superpowers/plans/2026-08-16-foundation-implementation.md`
+10. `docs/evidence/foundation/FOUNDATION-EVIDENCE-001.md`
+11. latest file in `docs/checkpoints/`
 
 ## Critical rules
 
@@ -42,10 +54,9 @@ Read in this order:
 - No silent overwrite of originals or conflicts.
 - Lack of evidence means UNKNOWN.
 - Real sensitive data requires Pilot Readiness plus explicit HUMAN_GATE by LEANDRO.
-- BOOT-01 completion does not authorize Foundation implementation.
+- FOUNDATION CI success does not authorize Slice 01.
+- PR #1 must not be merged without explicit LEANDRO approval.
 
-## Next proposed boundary
+## Next decision
 
-`FOUNDATION — Repository & Product Bootstrap`
-
-It must not start without a new explicit authorization/gate from LEANDRO.
+LEANDRO reviews the Foundation Readiness Gate and either authorizes merge of PR #1 or requests changes. Slice 01 remains blocked regardless until separately authorized.
