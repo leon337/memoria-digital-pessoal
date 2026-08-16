@@ -1,0 +1,42 @@
+name: Temporary Slice01 Task7 Format
+
+on:
+  push:
+    branches:
+      - slice/01-trusted-text-memory
+
+permissions:
+  contents: write
+
+jobs:
+  format-task7:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: slice/01-trusted-text-memory
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm exec prettier --write tests/architecture/slice-01-scope.test.ts
+      - name: Refuse any diff outside the exact test file
+        shell: bash
+        run: |
+          unexpected="$(git status --porcelain | awk '{print $2}' | grep -v '^tests/architecture/slice-01-scope.test.ts$' || true)"
+          if [ -n "$unexpected" ]; then
+            printf 'Unexpected changed paths:\n%s\n' "$unexpected"
+            exit 1
+          fi
+      - name: Commit formatting
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/architecture/slice-01-scope.test.ts
+          git commit -m 'style: format Slice 01 scope test'
+          git push origin HEAD:slice/01-trusted-text-memory
