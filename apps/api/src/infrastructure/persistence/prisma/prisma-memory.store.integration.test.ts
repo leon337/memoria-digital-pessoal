@@ -51,7 +51,9 @@ async function counts(): Promise<number[]> {
 
 beforeEach(async () => {
   await prisma.run(async (client) => {
-    await client.$executeRawUnsafe('DROP TRIGGER IF EXISTS slice01_fail_current_fact ON current_facts');
+    await client.$executeRawUnsafe(
+      'DROP TRIGGER IF EXISTS slice01_fail_current_fact ON current_facts',
+    );
     await client.$executeRawUnsafe('DROP FUNCTION IF EXISTS slice01_fail_current_fact_insert()');
   });
   await clearProductTables();
@@ -59,7 +61,9 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.run(async (client) => {
-    await client.$executeRawUnsafe('DROP TRIGGER IF EXISTS slice01_fail_current_fact ON current_facts');
+    await client.$executeRawUnsafe(
+      'DROP TRIGGER IF EXISTS slice01_fail_current_fact ON current_facts',
+    );
     await client.$executeRawUnsafe('DROP FUNCTION IF EXISTS slice01_fail_current_fact_insert()');
   });
   await clearProductTables();
