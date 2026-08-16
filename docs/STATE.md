@@ -6,7 +6,7 @@
 
 ## Current phase
 
-`BOOT-01 — Repository & Canonical State Bootstrap`
+`BOOT-01 — COMPLETE`
 
 ## Status
 
@@ -16,7 +16,7 @@
 | Conceptual Architecture | COMPLETE |
 | TECH-01 | COMPLETE |
 | PLAN-01 | COMPLETE |
-| BOOT-01 | IN PROGRESS |
+| BOOT-01 | COMPLETE |
 | Foundation implementation | NOT STARTED |
 | Product code | NOT STARTED |
 | Real data | NOT AUTHORIZED |
@@ -27,20 +27,34 @@
 - Human final authority: LEANDRO
 - Orchestrator: MESTRE
 - HUMAN_GATE belongs exclusively to LEANDRO.
-- Implementation must not begin merely because planning is complete.
+- Repository state is canonical when it can answer the project-state question.
+- Implementation does not begin merely because planning/bootstrap is complete.
+
+## BOOT-01 result
+
+BOOT-01 established:
+- official private repository;
+- canonical state document;
+- governance baseline;
+- Product Discovery decision lineage;
+- Conceptual Architecture decision lineage;
+- TECH-01 decision lineage;
+- PLAN-01 decision lineage;
+- implementation roadmap;
+- resume card and recovery order;
+- BOOT-01 phase record;
+- checkpoint convention.
+
+Repository-only recovery has been validated by reading the canonical files back from GitHub.
 
 ## Current boundary
 
-BOOT-01 may create repository structure, governance, state, roadmap, decision lineage, checkpoints and evidence conventions.
+BOOT-01 is closed.
 
-BOOT-01 must not implement product functionality.
+No product implementation is authorized yet.
 
-## Next gate
+## Next proposed boundary
 
-BOOT-01 closes only when:
-- official repository exists;
-- canonical documents are committed;
-- state recovery works from repository alone;
-- repository identity and visibility are recorded;
-- initial checkpoint is committed;
-- no product implementation has started.
+`FOUNDATION — Repository & Product Bootstrap`
+
+Starting FOUNDATION requires a new explicit authorization/gate from LEANDRO.
