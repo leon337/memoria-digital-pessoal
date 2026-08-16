@@ -2,6 +2,8 @@ import type { CreateMemoryResponse, GetMemoryResponse, MemoryQueryResponse } fro
 import { createTextMemoryRecord } from '@mdp/domain';
 import type { MemoryStore } from './memory.store.js';
 
+export const MEMORY_SERVICE = Symbol('MEMORY_SERVICE');
+
 export interface MemoryServiceOptions {
   store: MemoryStore;
   now: () => Date;

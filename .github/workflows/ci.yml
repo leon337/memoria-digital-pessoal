@@ -65,18 +65,24 @@ jobs:
           docker compose stop postgres
           live_db_down="$(curl -sS -o /tmp/live-db-down.json -w '%{http_code}' http://127.0.0.1:3000/health/live)"
           ready_db_down="$(curl -sS -o /tmp/ready-db-down.json -w '%{http_code}' http://127.0.0.1:3000/health/ready)"
+          memory_db_down="$(curl --max-time 15 -sS -o /tmp/memory-db-down.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{"text":"Registro sintético de indisponibilidade."}' http://127.0.0.1:3000/memories)"
           docker compose start postgres
 
           printf 'healthy live=%s ready=%s\n' "$live_healthy" "$ready_healthy"
-          printf 'db-down live=%s ready=%s\n' "$live_db_down" "$ready_db_down"
+          printf 'db-down live=%s ready=%s memory=%s\n' "$live_db_down" "$ready_db_down" "$memory_db_down"
           cat /tmp/live-healthy.json
           cat /tmp/ready-healthy.json
           cat /tmp/live-db-down.json
           cat /tmp/ready-db-down.json
+          cat /tmp/memory-db-down.json
 
           test "$live_healthy" = "200"
           test "$ready_healthy" = "200"
           test "$live_db_down" = "200"
           test "$ready_db_down" = "503"
+          test "$memory_db_down" = "503"
+          grep -q '"code":"SERVICE_UNAVAILABLE"' /tmp/memory-db-down.json
+          ! grep -q 'Registro sintético' /tmp/memory-db-down.json
+          ! grep -qi 'sql' /tmp/memory-db-down.json
       - if: always()
         run: docker compose down

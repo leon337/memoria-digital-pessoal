@@ -1,5 +1,14 @@
 import type { TextMemoryRecord } from '@mdp/domain';
 
+export const MEMORY_STORE = Symbol('MEMORY_STORE');
+
+export class MemoryStoreUnavailableError extends Error {
+  constructor(cause?: unknown) {
+    super('Memory persistence is unavailable', { cause });
+    this.name = 'MemoryStoreUnavailableError';
+  }
+}
+
 export interface StoredMemory {
   memory: {
     id: string;
@@ -34,5 +43,3 @@ export interface MemoryStore {
   getById(id: string): Promise<StoredMemory | null>;
   findLiteral(query: string): Promise<QueryHit | null>;
 }
-
-export type MemoryWriter = Pick<MemoryStore, 'create'>;
