@@ -5,18 +5,18 @@ import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
 import {
   PRISMA_SERVICE,
-  PrismaService
+  PrismaService,
 } from './infrastructure/persistence/prisma/prisma.service.js';
 
 const prismaProvider = {
   provide: PRISMA_SERVICE,
   inject: [API_ENV],
-  useFactory: (env: ApiEnv) => new PrismaService({ databaseUrl: env.databaseUrl })
+  useFactory: (env: ApiEnv) => new PrismaService({ databaseUrl: env.databaseUrl }),
 };
 
 @Module({
   imports: [EnvModule],
   controllers: [HealthController],
-  providers: [HealthService, prismaProvider]
+  providers: [HealthService, prismaProvider],
 })
 export class AppModule {}

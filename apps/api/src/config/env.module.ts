@@ -6,6 +6,6 @@ export const API_ENV = Symbol('API_ENV');
 @Global()
 @Module({
   providers: [{ provide: API_ENV, useFactory: () => parseApiEnv(process.env) }],
-  exports: [API_ENV]
+  exports: [API_ENV],
 })
 export class EnvModule {}

@@ -1,7 +1,7 @@
 import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import {
   PRISMA_SERVICE,
-  type PrismaService
+  type PrismaService,
 } from '../infrastructure/persistence/prisma/prisma.service.js';
 
 @Injectable()

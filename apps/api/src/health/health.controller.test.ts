@@ -16,7 +16,7 @@ beforeEach(async () => {
   prisma.ping.mockResolvedValue(undefined);
   const moduleRef = await Test.createTestingModule({
     controllers: [HealthController],
-    providers: [HealthService, { provide: PRISMA_SERVICE, useValue: prisma }]
+    providers: [HealthService, { provide: PRISMA_SERVICE, useValue: prisma }],
   }).compile();
 
   app = moduleRef.createNestApplication();

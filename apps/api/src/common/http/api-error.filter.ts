@@ -5,7 +5,7 @@ import {
   ExceptionFilter,
   HttpException,
   NotFoundException,
-  ServiceUnavailableException
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { ApiErrorCode, ApiErrorEnvelope } from './api-error.js';
@@ -39,7 +39,7 @@ export class ApiErrorFilter implements ExceptionFilter {
     }
 
     const body: ApiErrorEnvelope = {
-      error: { code, message, requestId: request.requestId }
+      error: { code, message, requestId: request.requestId },
     };
     response.status(status).json(body);
   }

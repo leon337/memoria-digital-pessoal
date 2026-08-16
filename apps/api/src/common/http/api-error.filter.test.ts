@@ -10,8 +10,8 @@ function createHost() {
   const host = {
     switchToHttp: () => ({
       getRequest: () => request,
-      getResponse: () => response
-    })
+      getResponse: () => response,
+    }),
   } as unknown as ArgumentsHost;
   return { host, json, status };
 }
@@ -26,8 +26,8 @@ describe('ApiErrorFilter', () => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Ocorreu um erro interno.',
-        requestId: 'request-123'
-      }
+        requestId: 'request-123',
+      },
     });
     expect(JSON.stringify(json.mock.calls)).not.toContain('password=secret');
   });

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { App } from './App.js';
 
 vi.mock('./lib/api-health.js', () => ({
-  getApiReadiness: vi.fn().mockResolvedValue('ready')
+  getApiReadiness: vi.fn().mockResolvedValue('ready'),
 }));
 
 describe('App', () => {

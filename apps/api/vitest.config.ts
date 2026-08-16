@@ -5,6 +5,6 @@ export default defineProject({
     name: 'api',
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    exclude: ['src/**/*.integration.test.ts']
-  }
+    exclude: ['src/**/*.integration.test.ts'],
+  },
 });

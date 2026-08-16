@@ -6,9 +6,9 @@ const schema = z.object({
     .string()
     .refine(
       (value) => value.startsWith('postgresql://') || value.startsWith('postgres://'),
-      'DATABASE_URL must be PostgreSQL'
+      'DATABASE_URL must be PostgreSQL',
     ),
-  WEB_ORIGIN: z.string().url()
+  WEB_ORIGIN: z.string().url(),
 });
 
 export interface ApiEnv {
@@ -22,6 +22,6 @@ export function parseApiEnv(source: Record<string, unknown>): ApiEnv {
   return {
     port: parsed.PORT,
     databaseUrl: parsed.DATABASE_URL,
-    webOrigin: parsed.WEB_ORIGIN
+    webOrigin: parsed.WEB_ORIGIN,
   };
 }

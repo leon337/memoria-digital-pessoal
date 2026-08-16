@@ -12,7 +12,7 @@ const neutralForbidden = [
   'redis',
   'ioredis',
   'bullmq',
-  '**/apps/*'
+  '**/apps/*',
 ];
 
 export default tseslint.config(
@@ -22,22 +22,22 @@ export default tseslint.config(
       '**/coverage/**',
       'playwright-report/**',
       'test-results/**',
-      'apps/api/src/infrastructure/persistence/prisma/generated/**'
-    ]
+      'apps/api/src/infrastructure/persistence/prisma/generated/**',
+    ],
   },
   {
     files: ['**/*.mjs'],
     ...js.configs.recommended,
-    languageOptions: { globals: globals.node }
+    languageOptions: { globals: globals.node },
   },
   ...tseslint.configs.recommended,
   {
     files: ['apps/web/**/*.{ts,tsx}'],
-    languageOptions: { globals: globals.browser }
+    languageOptions: { globals: globals.browser },
   },
   {
     files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'tests/**/*.ts', '*.ts'],
-    languageOptions: { globals: globals.node }
+    languageOptions: { globals: globals.node },
   },
   {
     files: ['**/*.{ts,tsx}'],
@@ -48,12 +48,12 @@ export default tseslint.config(
           patterns: [
             {
               group: publicApiOnly,
-              message: 'Use @mdp/* public entry points.'
-            }
-          ]
-        }
-      ]
-    }
+              message: 'Use @mdp/* public entry points.',
+            },
+          ],
+        },
+      ],
+    },
   },
   {
     files: ['packages/domain/**/*.ts', 'packages/contracts/**/*.ts'],
@@ -64,15 +64,15 @@ export default tseslint.config(
           patterns: [
             {
               group: publicApiOnly,
-              message: 'Use workspace public entry points.'
+              message: 'Use workspace public entry points.',
             },
             {
               group: neutralForbidden,
-              message: 'Domain/contracts must stay framework and infrastructure neutral.'
-            }
-          ]
-        }
-      ]
-    }
-  }
+              message: 'Domain/contracts must stay framework and infrastructure neutral.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

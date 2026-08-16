@@ -14,5 +14,5 @@ const env = getWebEnv();
 createRoot(root).render(
   <StrictMode>
     <App apiBaseUrl={env.apiBaseUrl} />
-  </StrictMode>
+  </StrictMode>,
 );
