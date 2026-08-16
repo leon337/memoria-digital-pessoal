@@ -19,6 +19,23 @@ jobs:
           node-version: '24'
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      - run: docker compose up -d postgres
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            id="$(docker compose ps -q postgres)"
+            [ -n "$id" ] && [ "$(docker inspect --format='{{.State.Health.Status}}' "$id")" = "healthy" ] && exit 0
+            sleep 2
+          done
+          docker compose logs postgres
+          exit 1
+      - run: pnpm prisma:validate
+      - run: pnpm prisma:generate
+      - run: pnpm db:migrate
+      - name: Assert no product tables
+        run: |
+          count="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations';")"
+          test "$count" = "0"
       - run: pnpm --filter @mdp/shared test
       - run: pnpm -r --filter './packages/*' typecheck
       - run: pnpm build:packages
@@ -27,5 +44,8 @@ jobs:
       - run: pnpm --filter @mdp/web typecheck
       - run: pnpm --filter @mdp/web build
       - run: pnpm --filter @mdp/api test
+      - run: pnpm --filter @mdp/api test:integration
       - run: pnpm --filter @mdp/api typecheck
       - run: pnpm --filter @mdp/api build
+      - if: always()
+        run: docker compose down
