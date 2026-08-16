@@ -1,8 +1,4 @@
-import type {
-  CreateMemoryResponse,
-  GetMemoryResponse,
-  MemoryQueryResponse,
-} from '@mdp/contracts';
+import type { CreateMemoryResponse, GetMemoryResponse, MemoryQueryResponse } from '@mdp/contracts';
 import { createTextMemoryRecord } from '@mdp/domain';
 import type { MemoryStore } from './memory.store.js';
 
