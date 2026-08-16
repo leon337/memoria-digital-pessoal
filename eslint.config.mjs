@@ -1,9 +1,12 @@
 import js from '@eslint/js';
 import globals from 'globals';
+import { builtinModules } from 'node:module';
 import tseslint from 'typescript-eslint';
 
 const publicApiOnly = ['@mdp/*/*', '**/packages/*/src/*'];
 const neutralForbidden = [
+  ...builtinModules,
+  'node:*',
   '@nestjs/*',
   '@prisma/*',
   'react',
