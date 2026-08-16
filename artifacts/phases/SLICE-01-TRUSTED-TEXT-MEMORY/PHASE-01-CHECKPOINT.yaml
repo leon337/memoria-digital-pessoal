@@ -8,15 +8,23 @@ pull_request:
   number: 2
   state: OPEN
   merged: false
-reviewed_code_head: 07a41381f7bc47d9f048f90f3b36fcc6f85e03d1
-canonical_code_ci:
-  run_id: 31939889153
-  job_id: 95147424876
+validated_product_code_head: de8185ed1a152c12828bee02a4c8acc3398a6d7d
+canonical_product_code_ci:
+  run_id: 31972155005
+  job_id: 95226131010
   conclusion: success
+tdd_remediation:
+  finding: prisma_pool_exhaustion_availability_mapping
+  red_commit: b5199578a570ed13e49be92464e1e14d0ca2eb6c
+  red_ci_run: 31972074965
+  fix_commit: de8185ed1a152c12828bee02a4c8acc3398a6d7d
+  green_ci_run: 31972155005
 findings:
   critical_open: 0
   important_open: 0
-  important_fixed: 2
+  technical_important_fixed: 2
+  codex_p2_fixed: 1
+  review_threads_open: 0
 data_boundary:
   synthetic_only: true
   real_sensitive_data_authorized: false
@@ -26,10 +34,12 @@ evidence:
   project: docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md
   phase: docs/phases/SLICE-01.md
   checkpoint: docs/checkpoints/MDP-SLICE-01-CHECKPOINT-001.md
+  independent_audit: docs/audits/SLICE-01-INDEPENDENT-MCF-AUDIT-001.md
 audit:
   mestre_technical_review: completed
-  independent_mcf_audit: pending_gate
+  independent_mcf_audit: completed_pass_for_gate
   independent_audit_simulated: false
+merge_authorized: false
 blockers: []
-next_action: perform governed Slice 01 gate process without merging first
-checkpoint_recipient: Slice 01 gate
+next_action: LEO internal gate, then HUMAN_GATE to LEANDRO before merge
+checkpoint_recipient: LEO internal gate

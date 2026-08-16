@@ -1,9 +1,9 @@
 PHASE-01 VALIDATION — EXPANDED SAFE REFERENCES
 
-Canonical reviewed code:
-  HEAD 07a41381f7bc47d9f048f90f3b36fcc6f85e03d1
-  CI   31939889153
-  JOB  95147424876
+Canonical validated product code:
+  HEAD de8185ed1a152c12828bee02a4c8acc3398a6d7d
+  CI   31972155005
+  JOB  95226131010
 
 Canonical CI sequence:
   - frozen pnpm install
@@ -15,6 +15,7 @@ Canonical CI sequence:
   - TypeScript typecheck
   - ESLint
   - Prettier check
+  - PRF SHA-256 manifest verification
   - Vitest projects: web, API, integration, shared, contracts, domain, architecture
   - build
   - workspace runtime import
@@ -23,6 +24,15 @@ Canonical CI sequence:
   - Slice 01 trusted-text browser E2E
   - real PostgreSQL outage degradation proof
   - safe memory POST outage proof
+
+Canonical GREEN results:
+  - 18 Vitest files passed
+  - 53 Vitest tests passed
+  - 2 Playwright E2E tests passed
+  - healthy live/ready = 200/200
+  - DB-down live/ready/memory = 200/503/503
+  - memory outage envelope = SERVICE_UNAVAILABLE
+  - submitted synthetic content and SQL are not leaked by the outage envelope
 
 Acceptance-specific executable evidence:
   apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts
@@ -33,6 +43,9 @@ Acceptance-specific executable evidence:
     * case-insensitive literal retrieval
     * percent/underscore literal behavior
     * stable recordedAt/factId ordering
+  apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.test.ts
+    * P2024 pool acquisition timeout maps to store unavailable
+    * P2037 too-many-connections maps to store unavailable
   apps/api/src/memories/memory.controller.test.ts
     * 201 create
     * 400 validation
@@ -50,26 +63,21 @@ Acceptance-specific executable evidence:
     * synthetic store -> success -> query -> answer/source -> UNKNOWN
     * laboratory warning visible
 
-Failure/recovery run references:
-  31938251896  frozen-lock RED
-  31938282421  lock repair PASS
-  31938312773  format RED
-  31938399126  format recovery PASS
-  31938438913  Task 1 full PASS
-  31938560238  Task 2 full PASS
-  31938652083  Task 3 format RED
-  31938704632  Task 3 format recovery PASS
-  31938733775  Task 3 tests PASS
-  31938834501  Task 4 format RED
-  31938999059  Task 5 format RED
-  31939182334  HTTP/web format recovery
-  31939219339  React isolation RED
-  31939294468  recovery PASS incl. outage 503
-  31939371905  Task 7 format RED
-  31939445337  Task 7 format recovery PASS
-  31939473156  Task 7 full PASS pre-review fixes
-  31939687037  E2E selector ambiguity RED
-  31939832073  final selector formatting RED
-  31939889153  reviewed-code canonical PASS
+Post-review TDD trace:
+  b5199578a570ed13e49be92464e1e14d0ca2eb6c  test-only RED commit
+  31972074965 / 95225939147  RED: P2024 and P2037 tests fail; 51 existing tests pass
+  de8185ed1a152c12828bee02a4c8acc3398a6d7d  minimal production fix
+  31972155005 / 95226131010  GREEN: complete CI PASS
+
+Review state:
+  - Codex P2 connection-pool finding: RESOLVED
+  - open review threads: 0
+  - open Critical: 0
+  - open Important: 0
+
+Independent MCF audit:
+  artifact: docs/audits/SLICE-01-INDEPENDENT-MCF-AUDIT-001.md
+  verdict: PASS_FOR_GATE
+  merge_authorization: NOT GRANTED
 
 No secret, credential or real personal content is included in this record.

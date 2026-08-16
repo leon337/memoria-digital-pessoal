@@ -24,13 +24,20 @@
 
 - Branch: `slice/01-trusted-text-memory`
 - PR: `#2 — SLICE 01: trusted text memory` — OPEN / NOT MERGED
-- Reviewed code HEAD: `07a41381f7bc47d9f048f90f3b36fcc6f85e03d1`
-- Canonical reviewed-code CI: `31939889153` / job `95147424876` — PASS
+- Validated product-code HEAD: `de8185ed1a152c12828bee02a4c8acc3398a6d7d`
+- Canonical product-code CI: `31972155005` / job `95226131010` — PASS
+- RED regression CI: `31972074965` / job `95225939147`
 - Evidence: `docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md`
 - PRF: `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/`
+- Independent audit: `docs/audits/SLICE-01-INDEPENDENT-MCF-AUDIT-001.md` — `PASS_FOR_GATE`
 - Open Critical findings: `0`
 - Open Important findings: `0`
-- Independent MCF audit: `NOT YET CLAIMED / gate input`
+- Open review threads: `0`
+- Merge authorization: `NOT GRANTED`
+
+## Post-review remediation
+
+The Codex P2 finding about Prisma `P2024`/`P2037` was confirmed through a test-only RED commit, corrected by the minimal allowlist change, verified by full GREEN CI, answered in the PR, and its review thread is resolved.
 
 ## Proven invariants
 
@@ -44,20 +51,10 @@
 - ordering is deterministic;
 - provenance is returned;
 - exact five-table schema boundary is enforced;
+- transient Prisma pool-capacity failures map to store unavailability;
 - no out-of-scope AI/infrastructure dependency entered the slice;
 - Foundation readiness and outage behavior remain green.
 
-## Recovery order
-
-1. `docs/STATE.md`
-2. `docs/MDP-RESUME-CARD.md`
-3. `docs/phases/SLICE-01.md`
-4. `docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md`
-5. `docs/superpowers/specs/2026-08-16-slice-01-trusted-text-memory-design.md`
-6. `docs/superpowers/plans/2026-08-16-slice-01-trusted-text-memory-implementation.md`
-7. `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/README.md`
-8. this checkpoint
-
 ## Next action
 
-Enter the governed Slice 01 gate process. Do not merge PR #2, mark Slice 01 complete, use real sensitive data, or start Slice 02 without the applicable gate decision.
+Run the LÉO internal gate using the independent-audit verdict and final branch CI as inputs. If that gate passes, present HUMAN_GATE exclusively to LEANDRO for explicit merge authorization. Do not merge PR #2, mark Slice 01 complete, use real sensitive data, or start Slice 02 before the applicable authorization.
