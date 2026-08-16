@@ -35,6 +35,11 @@ const memoryServiceProvider = {
 @Module({
   imports: [EnvModule],
   controllers: [HealthController, MemoryController],
-  providers: [HealthService, prismaProvider, memoryStoreProvider, memoryServiceProvider],
+  providers: [
+    HealthService,
+    prismaProvider,
+    memoryStoreProvider,
+    memoryServiceProvider,
+  ],
 })
 export class AppModule {}
