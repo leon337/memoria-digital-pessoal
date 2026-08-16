@@ -34,10 +34,12 @@ jobs:
       - run: pnpm prisma:validate
       - run: pnpm prisma:generate
       - run: pnpm db:migrate
-      - name: Assert no product tables
+      - name: Assert exact Slice 01 product tables
         run: |
-          count="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations';")"
-          test "$count" = "0"
+          actual="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT COALESCE(string_agg(tablename, ',' ORDER BY tablename), '') FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations';")"
+          expected="current_facts,evidence,facts,ledger_events,memories"
+          printf 'actual=%s\nexpected=%s\n' "$actual" "$expected"
+          test "$actual" = "$expected"
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
