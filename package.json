@@ -1,0 +1,26 @@
+{
+  "name": "memoria-digital-pessoal",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.0",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "build:packages": "pnpm -r --filter './packages/*' --if-present build",
+    "typecheck": "pnpm build:packages && pnpm -r --filter './packages/*' --if-present typecheck && pnpm -r --filter './apps/*' --if-present typecheck",
+    "build": "pnpm build:packages && pnpm -r --filter './apps/*' --if-present build",
+    "test": "pnpm build:packages && vitest run",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "eslint": "latest",
+    "globals": "latest",
+    "prettier": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest",
+    "vitest": "latest"
+  }
+}

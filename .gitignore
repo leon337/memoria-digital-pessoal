@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+playwright-report/
+test-results/
+apps/api/src/infrastructure/persistence/prisma/generated/
+.DS_Store
+.worktrees/
