@@ -10,9 +10,11 @@ Projeto governado pelo MCF para desenvolvimento de uma memória digital pessoal 
 - TECH-01 Q1–Q16: COMPLETE
 - PLAN-01 Q1–Q16: COMPLETE
 - PLAN-01 Consolidation: COMPLETE
-- BOOT-01: IN PROGRESS
+- BOOT-01: COMPLETE
+- Foundation: NOT STARTED / NOT AUTHORIZED
 - Implementation: NOT STARTED
 - Real sensitive data: NOT AUTHORIZED
+- Pilot: NOT AUTHORIZED
 - Final human authority: LEANDRO
 
 ## Regra de segurança
@@ -25,3 +27,7 @@ Nenhum dado real sensível deve ser usado antes de:
 ## Fonte de verdade
 
 Este repositório é a fonte de verdade operacional do projeto. Chats servem para colaboração e orquestração, não como armazenamento canônico de estado.
+
+## Retomada
+
+Comece por `docs/MDP-RESUME-CARD.md` e siga a ordem de recuperação indicada ali.
