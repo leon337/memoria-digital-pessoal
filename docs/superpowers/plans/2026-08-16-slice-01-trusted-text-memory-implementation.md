@@ -4,113 +4,96 @@
 
 **Goal:** Deliver the first trustworthy end-to-end textual memory flow: preserve exact text as canonical Evidence, append `MEMORY_CREATED`, create a deterministic Fact/current projection, retrieve it with literal PostgreSQL substring search, and return provenance or explicit `UNKNOWN`.
 
-**Architecture:** Keep `@mdp/domain` pure and infrastructure-neutral, put HTTP schemas/types in `@mdp/contracts`, and isolate all Prisma/PostgreSQL behavior under `apps/api/src/infrastructure`. One API application service orchestrates ID/time creation and a persistence port; one Prisma store owns the atomic five-record transaction and literal query. The React PWA consumes only HTTP contracts and exposes two simple accessible flows.
+**Architecture:** Keep `@mdp/domain` pure and infrastructure-neutral, put HTTP schemas/types in `@mdp/contracts`, and isolate Prisma/PostgreSQL behavior under `apps/api/src/infrastructure`. One API application service orchestrates IDs/time and a persistence port; one Prisma store owns the atomic five-record transaction and literal query. The React PWA consumes shared HTTP contracts and exposes two accessible smartphone-first flows.
 
 **Tech Stack:** Node 24, pnpm 10.34, TypeScript 6.0.3 strict/ESM, NestJS, Prisma 7 + PostgreSQL 17, React/Vite, Zod, Vitest/React Testing Library, Playwright Chromium, GitHub Actions.
 
 ## Global Constraints
 
-- Branch: `slice/01-trusted-text-memory`; do not implement on `main`.
+- Work only on `slice/01-trusted-text-memory`; never implement this slice on `main`.
 - Only synthetic, non-sensitive laboratory data is permitted.
 - Memory text is `1..4000` characters inclusive; whitespace-only is invalid; valid leading/trailing whitespace is preserved.
-- Query text is trimmed for matching and must be `1..200` characters inclusive after trimming.
-- `Fact.content` must equal the referenced `Evidence.content` exactly in Slice 01.
-- `Memory.occurredAt` is always `null`; `temporalPrecision` is always `unknown` in Slice 01.
-- Retrieval rule is literal case-insensitive substring: `strpos(lower(content), lower(trim(q))) > 0`.
-- `%` and `_` are literal query characters, never wildcard syntax.
-- Match ordering: newest `recordedAt` first, then `factId` ascending.
-- A found row proves only that a matching user-recorded statement exists; it does not externally verify truth.
-- No AI, embeddings, pgvector, Redis, BullMQ, worker, object storage, voice, offline, sync, corrections, purge, real-user data, or advanced authentication enters this slice.
-- Evidence and Ledger have no update path in Slice 01.
-- Every memory registration is one database transaction creating Memory + Evidence + LedgerEvent + Fact + CurrentFact or nothing.
-- Existing safe API error envelope, request ID, health endpoints, Foundation architecture boundaries and Foundation E2E remain regressions.
-- Merge is not authorized by a green CI alone; implementation stops at review/gate readiness.
+- Query text is trimmed for matching and is `1..200` characters inclusive after trimming.
+- `Fact.content === Evidence.content` exactly in Slice 01.
+- `CurrentFact.content === Fact.content` exactly in Slice 01.
+- `Memory.occurredAt` is always `null`; `temporalPrecision` is always `unknown`.
+- Retrieval predicate is exactly equivalent to `strpos(lower(content), lower(trim(q))) > 0`.
+- `%` and `_` are literal characters, never wildcard syntax.
+- Match order is newest `recordedAt` first, then `factId` ascending.
+- `FOUND` means a matching user-recorded statement exists; it does not externally verify objective truth.
+- Evidence and Ledger expose no update behavior in Slice 01.
+- Registration is one database transaction creating Memory + Evidence + LedgerEvent + Fact + CurrentFact, or nothing.
+- No automatic POST retry or deduplication claim.
+- No AI, embeddings, pgvector, Redis, BullMQ, worker, object storage, voice, offline, sync, corrections, purge, real-user data, or advanced authentication.
+- Existing request ID, safe API error envelope, health endpoints, architecture boundaries, Foundation E2E and PostgreSQL-outage proof remain regressions.
+- Green CI alone never authorizes merge or Slice 02.
 
 ---
 
 ## File Structure Lock
 
-Create or modify only these product-facing areas unless an executable failure proves another file is required:
-
 ```text
-packages/contracts/src/
-  memory.ts
-  memory.test.ts
-  index.ts
+packages/contracts/src/memory.ts
+packages/contracts/src/memory.test.ts
+packages/contracts/src/index.ts
+packages/contracts/package.json
 
-packages/domain/src/
-  memory.ts
-  memory.test.ts
-  index.ts
+packages/domain/src/memory.ts
+packages/domain/src/memory.test.ts
+packages/domain/src/index.ts
 
-prisma/
-  schema.prisma
-  migrations/20260816000200_slice_01_trusted_text_memory/migration.sql
+prisma/schema.prisma
+prisma/migrations/20260816000200_slice_01_trusted_text_memory/migration.sql
 
-apps/api/src/memories/
-  memory.store.ts
-  memory.service.ts
-  memory.service.test.ts
-  memory.controller.ts
-  memory.controller.test.ts
+apps/api/package.json
+apps/api/src/app.module.ts
+apps/api/src/memories/memory.store.ts
+apps/api/src/memories/memory.service.ts
+apps/api/src/memories/memory.service.test.ts
+apps/api/src/memories/memory.controller.ts
+apps/api/src/memories/memory.controller.test.ts
+apps/api/src/infrastructure/persistence/prisma/prisma.service.ts
+apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.ts
+apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts
 
-apps/api/src/infrastructure/persistence/prisma/
-  prisma.service.ts
-  prisma-memory.store.ts
-  prisma-memory.store.integration.test.ts
+apps/web/package.json
+apps/web/src/lib/memory-api.ts
+apps/web/src/lib/memory-api.test.ts
+apps/web/src/features/memory/StoreMemoryForm.tsx
+apps/web/src/features/memory/StoreMemoryForm.test.tsx
+apps/web/src/features/memory/QueryMemoryForm.tsx
+apps/web/src/features/memory/QueryMemoryForm.test.tsx
+apps/web/src/App.tsx
+apps/web/src/App.test.tsx
+apps/web/src/index.css
 
-apps/web/src/lib/
-  memory-api.ts
-  memory-api.test.ts
-
-apps/web/src/features/memory/
-  StoreMemoryForm.tsx
-  StoreMemoryForm.test.tsx
-  QueryMemoryForm.tsx
-  QueryMemoryForm.test.tsx
-
-apps/web/src/
-  App.tsx
-  App.test.tsx
-  index.css
-
-tests/architecture/
-  slice-01-scope.test.ts
-
-tests/e2e/
-  trusted-text-memory.spec.ts
-
+tests/architecture/slice-01-scope.test.ts
+tests/e2e/trusted-text-memory.spec.ts
 .github/workflows/ci.yml
+pnpm-lock.yaml
 
-docs/evidence/slice-01/
-  SLICE-01-EVIDENCE-001.md
-
-docs/phases/
-  SLICE-01.md
-
-docs/checkpoints/
-  MDP-SLICE-01-CHECKPOINT-001.md
-
+docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md
+docs/phases/SLICE-01.md
+docs/checkpoints/MDP-SLICE-01-CHECKPOINT-001.md
 docs/STATE.md
 docs/MDP-RESUME-CARD.md
 
-artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/
-  PHASE-01-PLAN.md
-  PHASE-01-REPORT.md
-  PHASE-01-VALIDATION.txt
-  PHASE-01-VALIDATION-FULL.txt
-  PHASE-01-SMOKE.txt
-  PHASE-01-CHECKPOINT.yaml
-  PHASE-01-DECISIONS.md
-  PHASE-01-ARTIFACT-MANIFEST.sha256
-  README.md
+artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/PHASE-01-PLAN.md
+artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/PHASE-01-REPORT.md
+artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/PHASE-01-VALIDATION.txt
+artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/PHASE-01-VALIDATION-FULL.txt
+artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/PHASE-01-SMOKE.txt
+artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/PHASE-01-CHECKPOINT.yaml
+artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/PHASE-01-DECISIONS.md
+artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/PHASE-01-ARTIFACT-MANIFEST.sha256
+artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/README.md
 ```
 
-Package manifests may be modified only to add the already-approved workspace/Zod dependencies required by these files. `pnpm-lock.yaml` changes only as a consequence of those manifest changes.
+Only add workspace/Zod dependencies required by these files. No unrelated refactor is part of Slice 01.
 
 ---
 
-### Task 1: Shared HTTP contracts and pure domain record
+### Task 1: Shared contracts and pure domain creation
 
 **Files:**
 - Create: `packages/contracts/src/memory.ts`
@@ -125,53 +108,55 @@ Package manifests may be modified only to add the already-approved workspace/Zod
 - Modify: `pnpm-lock.yaml`
 
 **Interfaces:**
-- Produces: `MEMORY_TEXT_MAX_LENGTH`, `MEMORY_QUERY_MAX_LENGTH`, `createMemoryRequestSchema`, `memoryQuerySchema`, `CreateMemoryResponse`, `GetMemoryResponse`, `MemoryQueryResponse` from `@mdp/contracts`.
-- Produces: `TextMemoryRecord`, `createTextMemoryRecord()` from `@mdp/domain`.
-- Consumes: `createId()` remains in `@mdp/shared`; domain must not import it directly.
+- `@mdp/contracts`: `MEMORY_TEXT_MAX_LENGTH`, `MEMORY_QUERY_MAX_LENGTH`, `createMemoryRequestSchema`, `memoryQuerySchema`, `CreateMemoryResponse`, `GetMemoryResponse`, `MemoryQueryResponse`.
+- `@mdp/domain`: `TextMemoryRecord`, `CreateTextMemoryRecordInput`, `createTextMemoryRecord(input)`.
 
 - [ ] **Step 1: Write failing contract tests**
-
-Create assertions covering valid 4000-character text, rejection at 4001, whitespace-only rejection, preservation of surrounding whitespace, query trimming, query max 200, and the exact `FOUND | UNKNOWN` response union.
 
 ```ts
 import { describe, expect, it } from 'vitest';
 import {
   createMemoryRequestSchema,
   memoryQuerySchema,
+  MEMORY_QUERY_MAX_LENGTH,
   MEMORY_TEXT_MAX_LENGTH,
 } from './memory.js';
 
 describe('memory contracts', () => {
   it('preserves valid surrounding whitespace', () => {
-    expect(createMemoryRequestSchema.parse({ text: '  memória sintética  ' }).text)
-      .toBe('  memória sintética  ');
+    const result = createMemoryRequestSchema.parse({ text: '  memória sintética  ' });
+    expect(result.text).toBe('  memória sintética  ');
   });
 
-  it('rejects whitespace-only and oversized memory text', () => {
+  it('accepts exactly 4000 characters', () => {
+    expect(createMemoryRequestSchema.parse({ text: 'x'.repeat(MEMORY_TEXT_MAX_LENGTH) }).text)
+      .toHaveLength(MEMORY_TEXT_MAX_LENGTH);
+  });
+
+  it('rejects whitespace-only and 4001 characters', () => {
     expect(() => createMemoryRequestSchema.parse({ text: '   ' })).toThrow();
-    expect(() => createMemoryRequestSchema.parse({ text: 'x'.repeat(MEMORY_TEXT_MAX_LENGTH + 1) }))
-      .toThrow();
+    expect(() =>
+      createMemoryRequestSchema.parse({ text: 'x'.repeat(MEMORY_TEXT_MAX_LENGTH + 1) }),
+    ).toThrow();
   });
 
-  it('trims query text for matching', () => {
+  it('trims query and enforces 200 characters after trim', () => {
     expect(memoryQuerySchema.parse('  Ana  ')).toBe('Ana');
+    expect(memoryQuerySchema.parse('x'.repeat(MEMORY_QUERY_MAX_LENGTH))).toHaveLength(200);
+    expect(() => memoryQuerySchema.parse('x'.repeat(MEMORY_QUERY_MAX_LENGTH + 1))).toThrow();
   });
 });
 ```
 
-- [ ] **Step 2: Run the contract test and verify RED**
-
-Run:
+- [ ] **Step 2: Run RED contract test**
 
 ```bash
 pnpm exec vitest run packages/contracts/src/memory.test.ts
 ```
 
-Expected: FAIL because `memory.ts` and exports do not exist.
+Expected: FAIL because the module/exports do not exist.
 
-- [ ] **Step 3: Implement the minimal shared contract**
-
-Create `packages/contracts/src/memory.ts` with exact limits and schemas:
+- [ ] **Step 3: Implement exact shared contracts**
 
 ```ts
 import { z } from 'zod';
@@ -196,9 +181,19 @@ export interface CreateMemoryResponse {
 }
 
 export interface GetMemoryResponse {
-  memory: { id: string; recordedAt: string; occurredAt: null; temporalPrecision: 'unknown' };
+  memory: {
+    id: string;
+    recordedAt: string;
+    occurredAt: null;
+    temporalPrecision: 'unknown';
+  };
   evidence: { id: string; kind: 'text'; content: string; createdAt: string };
-  fact: { id: string; kind: 'autobiographical_statement'; content: string; createdAt: string };
+  fact: {
+    id: string;
+    kind: 'autobiographical_statement';
+    content: string;
+    createdAt: string;
+  };
 }
 
 export type MemoryQueryResponse =
@@ -210,9 +205,9 @@ export type MemoryQueryResponse =
   | { status: 'UNKNOWN'; answer: null; provenance: null };
 ```
 
-Export it from `packages/contracts/src/index.ts`, add `zod` to `@mdp/contracts`, and add `@mdp/contracts` to both API and web workspace dependencies.
+Export from `packages/contracts/src/index.ts`. Add `zod` to `packages/contracts/package.json`, `@mdp/contracts` + `@mdp/domain` to the API, and `@mdp/contracts` to the web.
 
-- [ ] **Step 4: Run contracts and workspace build**
+- [ ] **Step 4: Run contracts GREEN**
 
 ```bash
 pnpm install
@@ -225,42 +220,55 @@ Expected: PASS.
 - [ ] **Step 5: Write failing pure-domain test**
 
 ```ts
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { createTextMemoryRecord } from './memory.js';
 
-it('creates the five linked Slice 01 records without changing text', () => {
+it('creates linked Slice 01 records without changing text or inventing time', () => {
+  const recordedAt = new Date('2026-08-16T08:00:00.000Z');
   const record = createTextMemoryRecord({
     text: '  Minha irmã se chama Ana.  ',
-    recordedAt: new Date('2026-08-16T08:00:00.000Z'),
+    recordedAt,
     ids: {
-      memoryId: '0198-memory',
-      evidenceId: '0198-evidence',
-      eventId: '0198-event',
-      factId: '0198-fact',
+      memoryId: 'memory-id',
+      evidenceId: 'evidence-id',
+      eventId: 'event-id',
+      factId: 'fact-id',
     },
   });
 
-  expect(record.evidence.content).toBe('  Minha irmã se chama Ana.  ');
-  expect(record.fact.content).toBe(record.evidence.content);
   expect(record.memory.occurredAt).toBeNull();
   expect(record.memory.temporalPrecision).toBe('unknown');
+  expect(record.evidence.content).toBe('  Minha irmã se chama Ana.  ');
+  expect(record.fact.content).toBe(record.evidence.content);
+  expect(record.currentFact.content).toBe(record.fact.content);
   expect(record.event.type).toBe('MEMORY_CREATED');
+  expect(record.event.evidenceId).toBe(record.evidence.id);
+  expect(record.evidence.createdAt).toEqual(recordedAt);
 });
 ```
 
-- [ ] **Step 6: Run domain test and verify RED**
+- [ ] **Step 6: Run domain RED test**
 
 ```bash
 pnpm exec vitest run packages/domain/src/memory.test.ts
 ```
 
-Expected: FAIL because `createTextMemoryRecord` does not exist.
+Expected: FAIL because the domain module does not exist.
 
-- [ ] **Step 7: Implement pure record creation**
-
-`packages/domain/src/memory.ts` must define one immutable return shape and must not import Prisma, Nest, Node built-ins, Zod, clocks, random generators or network APIs.
+- [ ] **Step 7: Implement pure domain types and factory**
 
 ```ts
+export interface CreateTextMemoryRecordInput {
+  text: string;
+  recordedAt: Date;
+  ids: {
+    memoryId: string;
+    evidenceId: string;
+    eventId: string;
+    factId: string;
+  };
+}
+
 export interface TextMemoryRecord {
   memory: {
     id: string;
@@ -298,11 +306,52 @@ export interface TextMemoryRecord {
     recordedAt: Date;
   };
 }
+
+export function createTextMemoryRecord(input: CreateTextMemoryRecordInput): TextMemoryRecord {
+  const { text, recordedAt, ids } = input;
+  return {
+    memory: {
+      id: ids.memoryId,
+      recordedAt,
+      occurredAt: null,
+      temporalPrecision: 'unknown',
+    },
+    evidence: {
+      id: ids.evidenceId,
+      memoryId: ids.memoryId,
+      kind: 'text',
+      content: text,
+      createdAt: recordedAt,
+    },
+    event: {
+      id: ids.eventId,
+      memoryId: ids.memoryId,
+      evidenceId: ids.evidenceId,
+      type: 'MEMORY_CREATED',
+      createdAt: recordedAt,
+    },
+    fact: {
+      id: ids.factId,
+      memoryId: ids.memoryId,
+      evidenceId: ids.evidenceId,
+      kind: 'autobiographical_statement',
+      content: text,
+      createdAt: recordedAt,
+    },
+    currentFact: {
+      factId: ids.factId,
+      memoryId: ids.memoryId,
+      evidenceId: ids.evidenceId,
+      content: text,
+      recordedAt,
+    },
+  };
+}
 ```
 
-`createTextMemoryRecord()` copies the same `text` into Evidence, Fact and CurrentFact, uses the same `recordedAt` for all Slice 01 timestamps, sets occurred time to `null`, and never trims or interprets the statement.
+Export from `packages/domain/src/index.ts`. Do not import Node/Prisma/Nest/Zod in domain.
 
-- [ ] **Step 8: Run domain + architecture regressions**
+- [ ] **Step 8: Run domain + architecture GREEN**
 
 ```bash
 pnpm exec vitest run packages/domain/src/memory.test.ts tests/architecture/eslint-boundaries.test.ts
@@ -320,7 +369,7 @@ git commit -m "feat: define trusted text memory contracts"
 
 ---
 
-### Task 2: Slice 01 PostgreSQL schema, migration and CI schema gate
+### Task 2: PostgreSQL schema, versioned migration and CI schema allowlist
 
 **Files:**
 - Modify: `prisma/schema.prisma`
@@ -328,19 +377,16 @@ git commit -m "feat: define trusted text memory contracts"
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
-- Produces database tables: `memories`, `evidence`, `ledger_events`, `facts`, `current_facts`.
-- Preserves Foundation migration history and generated-client output path.
+- Creates only `memories`, `evidence`, `ledger_events`, `facts`, `current_facts` beyond Prisma migration metadata.
 
-- [ ] **Step 1: Expand Prisma schema with the five exact models**
-
-Use UUID columns, PostgreSQL timestamptz, 4000-character content fields and snake-case table names. The schema must encode the provenance foreign keys; it must not add correction/delete/sync/AI columns.
+- [ ] **Step 1: Add five Prisma models**
 
 ```prisma
 model Memory {
-  id                String       @id @db.Uuid
-  recordedAt        DateTime     @map("recorded_at") @db.Timestamptz(3)
-  occurredAt        DateTime?    @map("occurred_at") @db.Timestamptz(3)
-  temporalPrecision String       @map("temporal_precision") @db.VarChar(32)
+  id                String        @id @db.Uuid
+  recordedAt        DateTime      @map("recorded_at") @db.Timestamptz(3)
+  occurredAt        DateTime?     @map("occurred_at") @db.Timestamptz(3)
+  temporalPrecision String        @map("temporal_precision") @db.VarChar(32)
   evidence          Evidence[]
   events            LedgerEvent[]
   facts             Fact[]
@@ -350,14 +396,14 @@ model Memory {
 }
 
 model Evidence {
-  id        String       @id @db.Uuid
-  memoryId  String       @map("memory_id") @db.Uuid
-  kind      String       @db.VarChar(32)
-  content   String       @db.VarChar(4000)
-  createdAt DateTime     @map("created_at") @db.Timestamptz(3)
-  memory    Memory       @relation(fields: [memoryId], references: [id], onDelete: Restrict)
-  events    LedgerEvent[]
-  facts     Fact[]
+  id           String        @id @db.Uuid
+  memoryId     String        @map("memory_id") @db.Uuid
+  kind         String        @db.VarChar(32)
+  content      String        @db.VarChar(4000)
+  createdAt    DateTime      @map("created_at") @db.Timestamptz(3)
+  memory       Memory        @relation(fields: [memoryId], references: [id], onDelete: Restrict)
+  events       LedgerEvent[]
+  facts        Fact[]
   currentFacts CurrentFact[]
 
   @@index([memoryId])
@@ -378,14 +424,14 @@ model LedgerEvent {
 }
 
 model Fact {
-  id         String        @id @db.Uuid
-  memoryId   String        @map("memory_id") @db.Uuid
-  evidenceId String        @map("evidence_id") @db.Uuid
-  kind       String        @db.VarChar(64)
-  content    String        @db.VarChar(4000)
-  createdAt  DateTime      @map("created_at") @db.Timestamptz(3)
-  memory     Memory        @relation(fields: [memoryId], references: [id], onDelete: Restrict)
-  evidence   Evidence      @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
+  id         String       @id @db.Uuid
+  memoryId   String       @map("memory_id") @db.Uuid
+  evidenceId String       @map("evidence_id") @db.Uuid
+  kind       String       @db.VarChar(64)
+  content    String       @db.VarChar(4000)
+  createdAt  DateTime     @map("created_at") @db.Timestamptz(3)
+  memory     Memory       @relation(fields: [memoryId], references: [id], onDelete: Restrict)
+  evidence   Evidence     @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
   current    CurrentFact?
 
   @@index([memoryId])
@@ -407,7 +453,7 @@ model CurrentFact {
 }
 ```
 
-- [ ] **Step 2: Validate schema before writing migration**
+- [ ] **Step 2: Validate/generate schema before migration**
 
 ```bash
 pnpm prisma:validate
@@ -416,11 +462,89 @@ pnpm prisma:generate
 
 Expected: PASS.
 
-- [ ] **Step 3: Create versioned migration SQL**
+- [ ] **Step 3: Create exact migration DDL**
 
-Create only the five approved tables plus their foreign keys/indexes. Use `VARCHAR(4000)` for Evidence/Fact/CurrentFact content and `TIMESTAMPTZ(3)` for timestamps. Do not add triggers, extensions, pgvector, generated search columns, update procedures, or delete procedures.
+```sql
+CREATE TABLE "memories" (
+  "id" UUID NOT NULL,
+  "recorded_at" TIMESTAMPTZ(3) NOT NULL,
+  "occurred_at" TIMESTAMPTZ(3),
+  "temporal_precision" VARCHAR(32) NOT NULL,
+  CONSTRAINT "memories_pkey" PRIMARY KEY ("id")
+);
 
-- [ ] **Step 4: Apply migrations to a clean Compose database**
+CREATE TABLE "evidence" (
+  "id" UUID NOT NULL,
+  "memory_id" UUID NOT NULL,
+  "kind" VARCHAR(32) NOT NULL,
+  "content" VARCHAR(4000) NOT NULL,
+  "created_at" TIMESTAMPTZ(3) NOT NULL,
+  CONSTRAINT "evidence_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "ledger_events" (
+  "id" UUID NOT NULL,
+  "memory_id" UUID NOT NULL,
+  "evidence_id" UUID NOT NULL,
+  "type" VARCHAR(64) NOT NULL,
+  "created_at" TIMESTAMPTZ(3) NOT NULL,
+  CONSTRAINT "ledger_events_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "facts" (
+  "id" UUID NOT NULL,
+  "memory_id" UUID NOT NULL,
+  "evidence_id" UUID NOT NULL,
+  "kind" VARCHAR(64) NOT NULL,
+  "content" VARCHAR(4000) NOT NULL,
+  "created_at" TIMESTAMPTZ(3) NOT NULL,
+  CONSTRAINT "facts_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "current_facts" (
+  "fact_id" UUID NOT NULL,
+  "memory_id" UUID NOT NULL,
+  "evidence_id" UUID NOT NULL,
+  "content" VARCHAR(4000) NOT NULL,
+  "recorded_at" TIMESTAMPTZ(3) NOT NULL,
+  CONSTRAINT "current_facts_pkey" PRIMARY KEY ("fact_id")
+);
+
+CREATE INDEX "evidence_memory_id_idx" ON "evidence"("memory_id");
+CREATE INDEX "ledger_events_memory_id_idx" ON "ledger_events"("memory_id");
+CREATE INDEX "facts_memory_id_idx" ON "facts"("memory_id");
+CREATE INDEX "current_facts_recorded_at_fact_id_idx" ON "current_facts"("recorded_at", "fact_id");
+
+ALTER TABLE "evidence"
+  ADD CONSTRAINT "evidence_memory_id_fkey"
+  FOREIGN KEY ("memory_id") REFERENCES "memories"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "ledger_events"
+  ADD CONSTRAINT "ledger_events_memory_id_fkey"
+  FOREIGN KEY ("memory_id") REFERENCES "memories"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "ledger_events"
+  ADD CONSTRAINT "ledger_events_evidence_id_fkey"
+  FOREIGN KEY ("evidence_id") REFERENCES "evidence"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "facts"
+  ADD CONSTRAINT "facts_memory_id_fkey"
+  FOREIGN KEY ("memory_id") REFERENCES "memories"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "facts"
+  ADD CONSTRAINT "facts_evidence_id_fkey"
+  FOREIGN KEY ("evidence_id") REFERENCES "evidence"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "current_facts"
+  ADD CONSTRAINT "current_facts_fact_id_fkey"
+  FOREIGN KEY ("fact_id") REFERENCES "facts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "current_facts"
+  ADD CONSTRAINT "current_facts_memory_id_fkey"
+  FOREIGN KEY ("memory_id") REFERENCES "memories"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "current_facts"
+  ADD CONSTRAINT "current_facts_evidence_id_fkey"
+  FOREIGN KEY ("evidence_id") REFERENCES "evidence"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+```
+
+- [ ] **Step 4: Apply on clean PostgreSQL**
 
 ```bash
 docker compose down -v
@@ -429,11 +553,9 @@ pnpm db:migrate
 pnpm prisma:generate
 ```
 
-Expected: Foundation migration then Slice 01 migration both apply successfully.
+Expected: Foundation migration and Slice 01 migration PASS.
 
-- [ ] **Step 5: Replace the obsolete Foundation zero-table CI assertion**
-
-Replace `Assert no product tables` with an exact allowlist check:
+- [ ] **Step 5: Replace obsolete zero-product-table CI assertion**
 
 ```yaml
 - name: Assert Slice 01 schema boundary
@@ -443,11 +565,15 @@ Replace `Assert no product tables` with an exact allowlist check:
     test "$actual" = "$expected"
 ```
 
-This is a scope guard: any accidental extra product table fails CI.
+- [ ] **Step 6: Run exact allowlist locally**
 
-- [ ] **Step 6: Run schema boundary manually**
+```bash
+actual="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;" | sed '/^$/d')"
+expected="$(printf '%s\n' _prisma_migrations current_facts evidence facts ledger_events memories)"
+test "$actual" = "$expected"
+```
 
-Run the same `psql` query and verify the exact six table names including `_prisma_migrations`.
+Expected: exit 0.
 
 - [ ] **Step 7: Commit Task 2**
 
@@ -458,7 +584,7 @@ git commit -m "feat: add trusted text memory schema"
 
 ---
 
-### Task 3: Atomic registration store and application service
+### Task 3: Persistence port, atomic write and application service
 
 **Files:**
 - Create: `apps/api/src/memories/memory.store.ts`
@@ -469,30 +595,78 @@ git commit -m "feat: add trusted text memory schema"
 - Create: `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts`
 
 **Interfaces:**
-- `MemoryStore.create(record: TextMemoryRecord): Promise<void>`.
-- `MemoryStore.getById(id: string): Promise<StoredMemory | null>`.
-- `MemoryStore.findLiteral(query: string): Promise<QueryHit | null>`.
-- `MemoryService.register(text: string): Promise<CreateMemoryResponse>`.
-- `MemoryService.get(id: string): Promise<GetMemoryResponse | null>`.
-- `MemoryService.query(query: string): Promise<MemoryQueryResponse>`.
 
-- [ ] **Step 1: Write service RED test for ID/time orchestration**
+```ts
+import type { TextMemoryRecord } from '@mdp/domain';
 
-Use a fake store, fixed UUID-v7-like strings and a fixed clock. Assert the service sends one `TextMemoryRecord` whose Evidence/Fact/CurrentFact content is identical and returns the expected response mapping.
+export interface StoredMemory {
+  memory: TextMemoryRecord['memory'];
+  evidence: TextMemoryRecord['evidence'];
+  fact: TextMemoryRecord['fact'];
+}
 
-- [ ] **Step 2: Run service test and verify RED**
+export interface QueryHit {
+  memoryId: string;
+  evidenceId: string;
+  factId: string;
+  content: string;
+  recordedAt: Date;
+}
+
+export interface MemoryStore {
+  create(record: TextMemoryRecord): Promise<void>;
+  getById(id: string): Promise<StoredMemory | null>;
+  findLiteral(query: string): Promise<QueryHit | null>;
+}
+
+export class MemoryStoreUnavailableError extends Error {
+  constructor(options?: ErrorOptions) {
+    super('Memory store unavailable', options);
+    this.name = 'MemoryStoreUnavailableError';
+  }
+}
+```
+
+- [ ] **Step 1: Write RED service test**
+
+```ts
+import { expect, it, vi } from 'vitest';
+import { MemoryService } from './memory.service.js';
+import type { MemoryStore } from './memory.store.js';
+
+it('registers one deterministic linked record and returns provenance', async () => {
+  const create = vi.fn().mockResolvedValue(undefined);
+  const store = { create, getById: vi.fn(), findLiteral: vi.fn() } as unknown as MemoryStore;
+  const ids = ['0198f000-0000-7000-8000-000000000001', '0198f000-0000-7000-8000-000000000002', '0198f000-0000-7000-8000-000000000003', '0198f000-0000-7000-8000-000000000004'];
+  const service = new MemoryService(store, () => ids.shift()!, () => new Date('2026-08-16T08:00:00.000Z'));
+
+  const result = await service.register('  Minha irmã se chama Ana.  ');
+  const record = create.mock.calls[0]![0];
+
+  expect(record.evidence.content).toBe('  Minha irmã se chama Ana.  ');
+  expect(record.fact.content).toBe(record.evidence.content);
+  expect(record.currentFact.content).toBe(record.fact.content);
+  expect(result.provenance.evidenceId).toBe(record.evidence.id);
+});
+```
+
+- [ ] **Step 2: Run service RED**
 
 ```bash
 pnpm --filter @mdp/api test -- memory.service.test.ts
 ```
 
-Expected: FAIL because service/store port do not exist.
+Expected: FAIL.
 
-- [ ] **Step 3: Define the store port and implement `MemoryService.register`**
-
-The service constructor accepts the store plus injectable `idFactory` and `clock`, defaulting to `createId` and `() => new Date()` in production.
+- [ ] **Step 3: Implement `MemoryService.register()`**
 
 ```ts
+import { createTextMemoryRecord } from '@mdp/domain';
+import { createId } from '@mdp/shared';
+import type { CreateMemoryResponse, GetMemoryResponse, MemoryQueryResponse } from '@mdp/contracts';
+import { ServiceUnavailableException } from '@nestjs/common';
+import { MemoryStoreUnavailableError, type MemoryStore } from './memory.store.js';
+
 export class MemoryService {
   constructor(
     private readonly store: MemoryStore,
@@ -512,17 +686,28 @@ export class MemoryService {
         factId: this.idFactory(),
       },
     });
-    await this.store.create(record);
+    await this.runStore(() => this.store.create(record));
     return {
       memory: { id: record.memory.id, recordedAt: recordedAt.toISOString() },
       fact: { id: record.fact.id, content: record.fact.content },
       provenance: { evidenceId: record.evidence.id },
     };
   }
+
+  private async runStore<T>(action: () => Promise<T>): Promise<T> {
+    try {
+      return await action();
+    } catch (error) {
+      if (error instanceof MemoryStoreUnavailableError) throw new ServiceUnavailableException();
+      throw error;
+    }
+  }
 }
 ```
 
-- [ ] **Step 4: Run service test and verify GREEN**
+Later steps add `get()` and `query()` to the same class using the same `runStore` mapping.
+
+- [ ] **Step 4: Run service GREEN**
 
 ```bash
 pnpm --filter @mdp/api test -- memory.service.test.ts
@@ -530,9 +715,7 @@ pnpm --filter @mdp/api test -- memory.service.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Expose Prisma client only inside infrastructure**
-
-Add a read-only `db` getter on `PrismaService`; do not export generated Prisma types through domain/contracts.
+- [ ] **Step 5: Expose Prisma client inside infrastructure only**
 
 ```ts
 get db(): PrismaClient {
@@ -540,33 +723,48 @@ get db(): PrismaClient {
 }
 ```
 
-- [ ] **Step 6: Write integration RED test for the full transaction**
+Do not re-export generated Prisma types from API/domain/contracts packages.
 
-Against real PostgreSQL, call `PrismaMemoryStore.create()` and assert one row in each of the five tables. Then create a second aggregate whose `factId` collides with the first aggregate so the Fact insert fails after Memory/Evidence/Event inserts; assert the second Memory/Evidence/Event rows do not exist afterward.
+- [ ] **Step 6: Write RED transaction integration test**
 
-- [ ] **Step 7: Run integration test and verify RED**
+Use `createTextMemoryRecord()` with real UUID-v7 IDs. First insert one valid record. Then create a second record with a new Memory/Evidence/Event but reuse the first record's `factId`; the Fact insert must violate its PK after earlier inserts in the same transaction. Assert the second Memory/Evidence/Event are absent after rejection.
+
+```ts
+await expect(store.create(conflictingRecord)).rejects.toBeInstanceOf(MemoryStoreUnavailableError);
+expect(await prisma.db.memory.findUnique({ where: { id: conflictingRecord.memory.id } })).toBeNull();
+expect(await prisma.db.evidence.findUnique({ where: { id: conflictingRecord.evidence.id } })).toBeNull();
+expect(await prisma.db.ledgerEvent.findUnique({ where: { id: conflictingRecord.event.id } })).toBeNull();
+```
+
+- [ ] **Step 7: Run transaction RED**
 
 ```bash
 pnpm --filter @mdp/api test:integration -- prisma-memory.store.integration.test.ts
 ```
 
-Expected: FAIL because `PrismaMemoryStore` does not exist.
+Expected: FAIL before store implementation.
 
-- [ ] **Step 8: Implement one `$transaction` for all five inserts**
+- [ ] **Step 8: Implement one atomic Prisma transaction**
 
 ```ts
-await this.prisma.db.$transaction(async (tx) => {
-  await tx.memory.create({ data: record.memory });
-  await tx.evidence.create({ data: record.evidence });
-  await tx.ledgerEvent.create({ data: record.event });
-  await tx.fact.create({ data: record.fact });
-  await tx.currentFact.create({ data: record.currentFact });
-});
+async create(record: TextMemoryRecord): Promise<void> {
+  try {
+    await this.prisma.db.$transaction(async (tx) => {
+      await tx.memory.create({ data: record.memory });
+      await tx.evidence.create({ data: record.evidence });
+      await tx.ledgerEvent.create({ data: record.event });
+      await tx.fact.create({ data: record.fact });
+      await tx.currentFact.create({ data: record.currentFact });
+    });
+  } catch (cause) {
+    throw new MemoryStoreUnavailableError({ cause });
+  }
+}
 ```
 
-Map field names explicitly when Prisma relation fields prevent direct object spreading. Do not catch and retry this transaction.
+If Prisma requires relation scalar mapping rather than direct object assignment, map scalar fields explicitly but preserve the same five inserts and ordering. Never retry automatically.
 
-- [ ] **Step 9: Run registration integration test and verify GREEN**
+- [ ] **Step 9: Run transaction GREEN**
 
 ```bash
 pnpm --filter @mdp/api test:integration -- prisma-memory.store.integration.test.ts
@@ -583,7 +781,7 @@ git commit -m "feat: persist text memories atomically"
 
 ---
 
-### Task 4: Deterministic retrieval and provenance reads
+### Task 4: Original-memory read and literal deterministic query
 
 **Files:**
 - Modify: `apps/api/src/memories/memory.store.ts`
@@ -592,39 +790,72 @@ git commit -m "feat: persist text memories atomically"
 - Modify: `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.ts`
 - Modify: `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts`
 
-**Interfaces:**
-- `StoredMemory` contains Memory + original Evidence + Fact.
-- `QueryHit` contains `memoryId`, `evidenceId`, `factId`, `content`, `recordedAt`.
+- [ ] **Step 1: Write RED retrieval integration tests**
 
-- [ ] **Step 1: Add RED integration tests for retrieval semantics**
-
-Prove all of these independently:
-
-```text
-Ana        matches "Minha irmã se chama Ana."
-SE CHAMA   matches "Minha irmã se chama Ana."
-%          matches only content containing a literal %
-_          matches only content containing a literal _
-unrelated  returns null
+```ts
+expect((await store.findLiteral('Ana'))?.content).toBe('Minha irmã se chama Ana.');
+expect((await store.findLiteral('SE CHAMA'))?.content).toBe('Minha irmã se chama Ana.');
+expect(await store.findLiteral('texto inexistente')).toBeNull();
 ```
 
-Also seed two matching rows with different `recordedAt` values and verify the newest wins; seed equal timestamps and verify ascending `factId` wins.
+Seed literal-special-character fixtures and assert:
 
-- [ ] **Step 2: Run integration tests and verify RED**
+```ts
+expect((await store.findLiteral('%'))?.content).toContain('%');
+expect((await store.findLiteral('_'))?.content).toContain('_');
+```
+
+Seed two matching records with different `recordedAt` and assert the newest is returned. Seed two matching records with equal `recordedAt` and assert lexicographically ascending `factId` is returned.
+
+- [ ] **Step 2: Run retrieval RED**
 
 ```bash
 pnpm --filter @mdp/api test:integration -- prisma-memory.store.integration.test.ts
 ```
 
-Expected: FAIL on unimplemented read/query methods.
+Expected: FAIL on missing read/query methods.
 
-- [ ] **Step 3: Implement `getById` through Prisma relations**
+- [ ] **Step 3: Implement `getById()` preserving original Evidence**
 
-Fetch one Memory and include its single Slice 01 Evidence and Fact. Return `null` when absent; do not synthesize provenance.
+```ts
+const row = await this.prisma.db.memory.findUnique({
+  where: { id },
+  include: { evidence: true, facts: true },
+});
+if (!row) return null;
+const evidence = row.evidence[0];
+const fact = row.facts[0];
+if (!evidence || !fact) throw new MemoryStoreUnavailableError();
+return {
+  memory: {
+    id: row.id,
+    recordedAt: row.recordedAt,
+    occurredAt: null,
+    temporalPrecision: 'unknown',
+  },
+  evidence: {
+    id: evidence.id,
+    memoryId: evidence.memoryId,
+    kind: 'text',
+    content: evidence.content,
+    createdAt: evidence.createdAt,
+  },
+  fact: {
+    id: fact.id,
+    memoryId: fact.memoryId,
+    evidenceId: fact.evidenceId,
+    kind: 'autobiographical_statement',
+    content: fact.content,
+    createdAt: fact.createdAt,
+  },
+};
+```
 
-- [ ] **Step 4: Implement literal query with parameterized `$queryRaw`**
+Wrap actual Prisma failures as `MemoryStoreUnavailableError`; a genuine absent row remains `null`.
 
-Use the exact SQL predicate from the approved spec; do not use Prisma `contains`, `LIKE` or `ILIKE` because `%` and `_` must not become wildcards.
+- [ ] **Step 4: Implement exact parameterized literal query**
+
+Do not use `contains`, `LIKE` or `ILIKE`.
 
 ```ts
 const rows = await this.prisma.db.$queryRaw<QueryHit[]>`
@@ -639,74 +870,99 @@ const rows = await this.prisma.db.$queryRaw<QueryHit[]>`
   ORDER BY "recorded_at" DESC, "fact_id" ASC
   LIMIT 1
 `;
+return rows[0] ?? null;
 ```
 
-Interpolation must remain Prisma tagged-template parameterization. Never build SQL with string concatenation.
+The tagged template must remain parameterized; no string-built SQL.
 
-- [ ] **Step 5: Implement service response mapping**
-
-`MemoryService.query()` returns exactly:
+- [ ] **Step 5: Add service read/query mappings and unit tests**
 
 ```ts
-return hit
-  ? {
-      status: 'FOUND',
-      answer: hit.content,
-      provenance: {
-        memoryId: hit.memoryId,
-        evidenceId: hit.evidenceId,
-        factId: hit.factId,
-      },
-    }
-  : { status: 'UNKNOWN', answer: null, provenance: null };
+async query(query: string): Promise<MemoryQueryResponse> {
+  const hit = await this.runStore(() => this.store.findLiteral(query));
+  return hit
+    ? {
+        status: 'FOUND',
+        answer: hit.content,
+        provenance: {
+          memoryId: hit.memoryId,
+          evidenceId: hit.evidenceId,
+          factId: hit.factId,
+        },
+      }
+    : { status: 'UNKNOWN', answer: null, provenance: null };
+}
 ```
 
-`MemoryService.get()` returns original Evidence content and the Fact while preserving `occurredAt: null` and `temporalPrecision: 'unknown'`.
+`get(id)` maps stored Date values to ISO strings and returns exact Evidence/Fact content; return `null` when the store returns `null`.
 
-- [ ] **Step 6: Run unit + integration tests and verify GREEN**
+- [ ] **Step 6: Run API unit + integration GREEN**
 
 ```bash
 pnpm --filter @mdp/api test
 pnpm --filter @mdp/api test:integration
 ```
 
-Expected: PASS.
+Expected: PASS for case-insensitive substring, literal `%`/`_`, stable ordering, provenance and `UNKNOWN`.
 
 - [ ] **Step 7: Commit Task 4**
 
 ```bash
-git add apps/api/src/memories apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.ts
+git add apps/api/src/memories apps/api/src/infrastructure/persistence/prisma
 git commit -m "feat: add deterministic memory retrieval"
 ```
 
 ---
 
-### Task 5: HTTP endpoints and safe failure behavior
+### Task 5: HTTP endpoints and safe database failure mapping
 
 **Files:**
 - Create: `apps/api/src/memories/memory.controller.ts`
 - Create: `apps/api/src/memories/memory.controller.test.ts`
 - Modify: `apps/api/src/app.module.ts`
-- Modify: `apps/api/src/common/http/api-error.filter.test.ts` only if a new regression test is needed; do not change the safe envelope shape without a spec change.
+- Modify: `apps/api/src/common/http/api-error.filter.test.ts` only to add regression coverage if needed.
 
 **Interfaces:**
-- `POST /memories` -> `201 CreateMemoryResponse`.
-- `GET /memories/:id` -> `200 GetMemoryResponse` or existing `404 NOT_FOUND` envelope.
-- `GET /query?q=...` -> `200 MemoryQueryResponse`.
+- `POST /memories` -> 201 `CreateMemoryResponse`.
+- `GET /memories/:id` -> 200 `GetMemoryResponse`; valid absent UUID -> existing 404 `NOT_FOUND` envelope.
+- `GET /query?q=...` -> 200 `MemoryQueryResponse`.
+- malformed input/query/id -> 400 validation envelope.
+- database connection failure -> 503 `SERVICE_UNAVAILABLE` envelope without leaking internals.
 
-- [ ] **Step 1: Write controller RED tests**
+- [ ] **Step 1: Write RED controller tests**
 
-Use Nest testing + Supertest with a fake `MemoryService`. Cover 201 success, whitespace-only 400, >4000 400, missing memory 404, trimmed query passed to service, >200 query 400, `FOUND`, `UNKNOWN`.
+```ts
+it('returns 201 without trimming the memory text', async () => {
+  memoryService.register = vi.fn().mockResolvedValue(createdResponse);
+  await request(app.getHttpServer())
+    .post('/memories')
+    .send({ text: '  Minha irmã se chama Ana.  ' })
+    .expect(201);
+  expect(memoryService.register).toHaveBeenCalledWith('  Minha irmã se chama Ana.  ');
+});
 
-- [ ] **Step 2: Run controller test and verify RED**
+it('rejects whitespace-only input', async () => {
+  await request(app.getHttpServer()).post('/memories').send({ text: '   ' }).expect(400);
+});
+
+it('trims query before service call', async () => {
+  memoryService.query = vi.fn().mockResolvedValue({ status: 'UNKNOWN', answer: null, provenance: null });
+  await request(app.getHttpServer()).get('/query').query({ q: '  Ana  ' }).expect(200);
+  expect(memoryService.query).toHaveBeenCalledWith('Ana');
+});
+```
+
+Also test >4000 text, >200 trimmed query, malformed memory ID, valid missing UUID-v7 -> 404, `FOUND`, `UNKNOWN`, and `MemoryStoreUnavailableError` -> 503.
+
+- [ ] **Step 2: Run controller RED**
 
 ```bash
 pnpm --filter @mdp/api test -- memory.controller.test.ts
 ```
 
-Expected: FAIL because controller is missing.
+Expected: FAIL.
 
-- [ ] **Step 3: Implement controller validation with shared Zod schemas**
+- [ ] **Step 3: Implement controller with shared validation**
 
 ```ts
 @Post('memories')
@@ -725,17 +981,43 @@ async query(@Query('q') q: unknown): Promise<MemoryQueryResponse> {
 }
 ```
 
-For `GET /memories/:id`, return `NotFoundException` when service returns `null`.
+For `GET /memories/:id`, use existing `isUuidV7()` before persistence access; malformed IDs are 400, valid absent IDs are 404.
 
-- [ ] **Step 4: Wire providers in `AppModule`**
+- [ ] **Step 4: Wire providers into `AppModule`**
 
-Add `MemoryController`, `MemoryService` provider and `MEMORY_STORE -> PrismaMemoryStore` provider while preserving existing HealthController/HealthService/PRISMA_SERVICE wiring.
+```ts
+const memoryStoreProvider = {
+  provide: MEMORY_STORE,
+  inject: [PRISMA_SERVICE],
+  useFactory: (prisma: PrismaService) => new PrismaMemoryStore(prisma),
+};
 
-- [ ] **Step 5: Add database-outage endpoint regression**
+const memoryServiceProvider = {
+  provide: MemoryService,
+  inject: [MEMORY_STORE],
+  useFactory: (store: MemoryStore) => new MemoryService(store),
+};
+```
 
-With real PostgreSQL stopped, a memory endpoint must return a safe error envelope without SQL/stack/credentials/evidence leakage. If raw Prisma exceptions currently map to generic 500, keep 500 only if the endpoint failure is truly internal; for connection-unavailable errors map to Nest `ServiceUnavailableException` so the existing filter returns `SERVICE_UNAVAILABLE`.
+Add MemoryController and providers without removing HealthController/HealthService/PRISMA_SERVICE.
 
-- [ ] **Step 6: Run API suites**
+- [ ] **Step 5: Prove safe DB-outage endpoint behavior**
+
+Run API against Compose PostgreSQL, stop PostgreSQL, then call a memory endpoint. Expected HTTP 503 body shape remains:
+
+```json
+{
+  "error": {
+    "code": "SERVICE_UNAVAILABLE",
+    "message": "Serviço temporariamente indisponível.",
+    "requestId": "generated-uuid-v7"
+  }
+}
+```
+
+Assert response does not contain database URL, SQL, stack trace or synthetic Evidence content.
+
+- [ ] **Step 6: Run API regressions**
 
 ```bash
 pnpm --filter @mdp/api test
@@ -769,17 +1051,34 @@ git commit -m "feat: expose trusted text memory API"
 - Modify: `apps/web/src/index.css`
 
 **Interfaces:**
-- `createMemory(apiBaseUrl, text): Promise<CreateMemoryResponse>`.
-- `queryMemory(apiBaseUrl, query): Promise<MemoryQueryResponse>`.
+- `createMemory(apiBaseUrl: string, text: string): Promise<CreateMemoryResponse>`.
+- `queryMemory(apiBaseUrl: string, query: string): Promise<MemoryQueryResponse>`.
 
 - [ ] **Step 1: Write RED API-client tests**
 
-Mock `fetch` and prove exact URL/method/body plus typed error behavior. The POST client sends the exact textarea string without trimming.
+```ts
+it('posts the exact memory string without trimming', async () => {
+  global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(createdResponse), { status: 201 }));
+  await createMemory('http://api', '  Minha irmã se chama Ana.  ');
+  expect(fetch).toHaveBeenCalledWith(
+    'http://api/memories',
+    expect.objectContaining({ body: JSON.stringify({ text: '  Minha irmã se chama Ana.  ' }) }),
+  );
+});
 
-- [ ] **Step 2: Implement the minimal API client**
+it('URL-encodes literal query characters', async () => {
+  global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(unknownResponse), { status: 200 }));
+  await queryMemory('http://api', '% _ Ana');
+  expect(String((fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0])).toContain('%25+_+Ana');
+});
+```
+
+The exact URL assertion may use `URL`/`URLSearchParams` normalization; the requirement is that raw concatenation is not used.
+
+- [ ] **Step 2: Implement minimal typed HTTP client**
 
 ```ts
-export async function createMemory(apiBaseUrl: string, text: string) {
+export async function createMemory(apiBaseUrl: string, text: string): Promise<CreateMemoryResponse> {
   const response = await fetch(`${apiBaseUrl}/memories`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -788,11 +1087,16 @@ export async function createMemory(apiBaseUrl: string, text: string) {
   if (!response.ok) throw new Error('MEMORY_CREATE_FAILED');
   return (await response.json()) as CreateMemoryResponse;
 }
+
+export async function queryMemory(apiBaseUrl: string, query: string): Promise<MemoryQueryResponse> {
+  const params = new URLSearchParams({ q: query });
+  const response = await fetch(`${apiBaseUrl}/query?${params.toString()}`);
+  if (!response.ok) throw new Error('MEMORY_QUERY_FAILED');
+  return (await response.json()) as MemoryQueryResponse;
+}
 ```
 
-Implement `queryMemory` with `URLSearchParams` so `%`, `_`, accents and spaces are URL-encoded, not manually concatenated.
-
-- [ ] **Step 3: Run API-client test and verify GREEN**
+- [ ] **Step 3: Run API-client GREEN**
 
 ```bash
 pnpm --filter @mdp/web test -- memory-api.test.ts
@@ -800,34 +1104,32 @@ pnpm --filter @mdp/web test -- memory-api.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 4: Write RED component tests**
+- [ ] **Step 4: Write RED store-form tests**
 
-Store form requirements:
-
-```text
-heading/label: Guardar uma lembrança
-textarea maxLength: 4000
-button reachable by accessible name
-success role=status only after resolved POST
-failure uses role=alert or accessible live region
-no automatic retry
+```tsx
+render(<StoreMemoryForm apiBaseUrl="http://api" />);
+const input = screen.getByLabelText('Lembrança');
+expect(input).toHaveAttribute('maxlength', '4000');
+await userEvent.type(input, 'Minha irmã se chama Ana.');
+await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+expect(await screen.findByText('Lembrança guardada.')).toBeInTheDocument();
 ```
 
-Query form requirements:
+Failure test: reject the API promise and assert an accessible error appears and success does not appear. Do not assert or implement automatic retry.
 
-```text
-heading/label: Consultar minhas lembranças
-input maxLength: 200
-helper text explains literal words/phrases
-FOUND displays exact recorded statement and a visible source indicator
-UNKNOWN displays explicit inability to find matching recorded evidence
+- [ ] **Step 5: Write RED query-form tests**
+
+```tsx
+render(<QueryMemoryForm apiBaseUrl="http://api" />);
+expect(screen.getByLabelText('Palavra ou frase')).toHaveAttribute('maxlength', '200');
+expect(screen.getByText(/procura palavras ou frases exatamente/i)).toBeInTheDocument();
 ```
 
-- [ ] **Step 5: Implement focused components**
+Mock `FOUND` and assert exact statement plus `Fonte: lembrança guardada`. Mock `UNKNOWN` and assert `Não encontrei uma lembrança registrada que corresponda a essa busca.`
 
-Do not put all form/network/state logic back into `App.tsx`. `App` keeps Foundation readiness status and renders the two feature components when the API is ready.
+- [ ] **Step 6: Implement focused components and keep readiness regression stable**
 
-Use explicit Portuguese copy:
+Required Portuguese labels/copy:
 
 ```text
 Guardar uma lembrança
@@ -836,16 +1138,21 @@ Guardar
 Lembrança guardada.
 Consultar minhas lembranças
 Palavra ou frase
+Consultar
 A busca desta etapa procura palavras ou frases exatamente dentro das lembranças guardadas.
 Fonte: lembrança guardada
 Não encontrei uma lembrança registrada que corresponda a essa busca.
 ```
 
-- [ ] **Step 6: Add low-cognitive-load CSS without a visual redesign**
+Render store success status conditionally only after a successful POST so the initial page still has exactly the existing Foundation `role="status"` element for `API pronta`. Query results may use an `aria-live="polite"` region without adding another initial `role="status"`.
 
-Use existing CSS, one-column smartphone-first layout, adequate spacing, inputs/buttons at least 44px tall, visible `:focus-visible`, readable line-height, and no color-only state semantics. Do not add a component library.
+`App.tsx` retains the existing readiness check and renders feature forms once ready; it does not absorb form/network logic.
 
-- [ ] **Step 7: Run web tests/typecheck/build**
+- [ ] **Step 7: Add minimal low-cognitive-load CSS**
+
+One-column smartphone-first layout, readable line height, explicit labels, controls at least 44px tall, visible `:focus-visible`, adequate spacing, and no color-only state. Do not add a UI framework.
+
+- [ ] **Step 8: Run web GREEN**
 
 ```bash
 pnpm --filter @mdp/web test
@@ -853,9 +1160,9 @@ pnpm --filter @mdp/web typecheck
 pnpm --filter @mdp/web build
 ```
 
-Expected: PASS.
+Expected: PASS, including existing App/Foundation assertions.
 
-- [ ] **Step 8: Commit Task 6**
+- [ ] **Step 9: Commit Task 6**
 
 ```bash
 git add apps/web
@@ -864,38 +1171,32 @@ git commit -m "feat: add trusted text memory web flow"
 
 ---
 
-### Task 7: Executable invariants, browser E2E and cumulative CI
+### Task 7: Executable scope invariants, E2E and cumulative acceptance
 
 **Files:**
 - Create: `tests/architecture/slice-01-scope.test.ts`
 - Create: `tests/e2e/trusted-text-memory.spec.ts`
-- Modify: `.github/workflows/ci.yml` only if commands added by earlier tasks are not already covered.
+- Modify: `.github/workflows/ci.yml` only if an earlier required command is not already covered.
 
-**Interfaces:**
-- Produces reproducible acceptance evidence for the vertical slice.
-
-- [ ] **Step 1: Write the scope-invariant test**
-
-The test reads workspace manifests/source paths and fails if Slice 01 introduces forbidden product dependencies or direct infrastructure imports in domain/contracts.
-
-At minimum reject package/source occurrences corresponding to:
+- [ ] **Step 1: Write Slice 01 scope test**
 
 ```ts
-const forbidden = [
+const forbiddenProductDependencies = [
   'pgvector',
   'bullmq',
   'redis',
   'openai',
   '@anthropic-ai',
-  'node:fs',
-  'node:fs/promises',
-  '@prisma/client',
 ];
+
+for (const dependency of forbiddenProductDependencies) {
+  expect(serializedWorkspaceManifests).not.toContain(`"${dependency}"`);
+}
 ```
 
-Reuse the existing ESLint boundary test for the already-established Node/Prisma neutrality; this new test additionally proves Slice 01 scope does not add AI/queue/vector infrastructure.
+Reuse existing `eslint-boundaries.test.ts` for Node/Prisma neutrality. Also assert no Evidence/Ledger update controller/store method is introduced by checking the Slice 01 memory feature exports/routes rather than scanning unrelated third-party text.
 
-- [ ] **Step 2: Run architecture tests**
+- [ ] **Step 2: Run architecture GREEN**
 
 ```bash
 pnpm exec vitest run tests/architecture
@@ -908,13 +1209,18 @@ Expected: PASS.
 ```ts
 import { expect, test } from '@playwright/test';
 
-test('stores and retrieves a trusted text memory with provenance and UNKNOWN fallback', async ({ page }) => {
+test('stores and retrieves trusted text with provenance and UNKNOWN fallback', async ({ page, request }) => {
+  await expect
+    .poll(async () => (await request.get('http://127.0.0.1:3000/health/ready')).status())
+    .toBe(200);
+
   await page.goto('/');
-  await expect(page.getByRole('status')).toContainText('API pronta');
+  await expect(page.getByRole('heading', { name: 'Memória Digital Pessoal' })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText('API pronta');
 
   await page.getByLabel('Lembrança').fill('Minha irmã se chama Ana.');
   await page.getByRole('button', { name: 'Guardar' }).click();
-  await expect(page.getByRole('status')).toContainText('Lembrança guardada.');
+  await expect(page.getByText('Lembrança guardada.')).toBeVisible();
 
   await page.getByLabel('Palavra ou frase').fill('Ana');
   await page.getByRole('button', { name: 'Consultar' }).click();
@@ -927,17 +1233,17 @@ test('stores and retrieves a trusted text memory with provenance and UNKNOWN fal
 });
 ```
 
-- [ ] **Step 4: Run E2E and verify RED/GREEN cycle**
+- [ ] **Step 4: Run E2E RED then GREEN**
 
-Before final implementation integration, the new test must fail. After web/API tasks are complete:
+Before feature implementation is complete, the new spec must fail. After Tasks 1–6:
 
 ```bash
 pnpm e2e
 ```
 
-Expected: both Foundation E2E and Trusted Text Memory E2E PASS using built apps and real PostgreSQL.
+Expected: Foundation E2E and Slice 01 E2E both PASS using built web/API and real PostgreSQL.
 
-- [ ] **Step 5: Run the complete local acceptance sequence**
+- [ ] **Step 5: Run complete local acceptance sequence**
 
 ```bash
 pnpm install --frozen-lockfile
@@ -957,25 +1263,23 @@ pnpm build
 pnpm e2e
 ```
 
-Then manually repeat the Foundation database-outage proof and verify:
+Expected: every command PASS.
 
-```text
-healthy live=200 ready=200
-db-down live=200 ready=503
-```
-
-Expected: every command/proof PASS.
-
-- [ ] **Step 6: Verify exact table boundary again**
+- [ ] **Step 6: Re-run exact table boundary**
 
 ```bash
-docker compose exec -T postgres psql -U mdp -d mdp -tAc \
-  "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;"
+actual="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;" | sed '/^$/d')"
+expected="$(printf '%s\n' _prisma_migrations current_facts evidence facts ledger_events memories)"
+test "$actual" = "$expected"
 ```
 
-Expected exact product set: `current_facts`, `evidence`, `facts`, `ledger_events`, `memories`, plus `_prisma_migrations`.
+Expected: exit 0.
 
-- [ ] **Step 7: Commit Task 7**
+- [ ] **Step 7: Re-run Foundation outage proof**
+
+Start built API with PostgreSQL healthy, capture live/ready 200/200, stop PostgreSQL, capture live/ready 200/503, restart PostgreSQL. No regression from Foundation is allowed.
+
+- [ ] **Step 8: Commit Task 7**
 
 ```bash
 git add tests .github/workflows/ci.yml
@@ -984,43 +1288,35 @@ git commit -m "test: prove trusted text memory slice"
 
 ---
 
-### Task 8: Evidence, MCF traceability pack, review readiness and gate boundary
+### Task 8: Evidence, MCF PRF, independent review and gate readiness
 
 **Files:**
-- Create: `docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md`
-- Create: `docs/phases/SLICE-01.md`
-- Create: `docs/checkpoints/MDP-SLICE-01-CHECKPOINT-001.md`
-- Modify: `docs/STATE.md`
-- Modify: `docs/MDP-RESUME-CARD.md`
-- Create all files under `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/` listed in the File Structure Lock.
+- Create/update all docs and `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/` files listed in File Structure Lock.
 
-**Interfaces:**
-- Produces the project evidence record and MCF Phase Traceability Pack.
-- Final branch state after this task: `SLICE 01 — IN_REVIEW`, never `COMPLETE` before review/CI/gate.
+**Final allowed state:** `SLICE 01 — IN_REVIEW / READY_FOR_GATE`; never `COMPLETE` in this task.
 
-- [ ] **Step 1: Capture exact validation evidence**
+- [ ] **Step 1: Write project evidence from observed outputs**
 
-Record command, observed result and exact HEAD SHA for every acceptance item in `SLICE-01-EVIDENCE-001.md`. Use synthetic fixture text only. Include migration result, five-table boundary, unit/integration/E2E totals, rollback proof, literal `%`/`_` proof, ordering proof, provenance proof, `UNKNOWN` proof, Foundation regression and outage/readiness proof.
+`docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md` records mission/boundary, exact HEAD SHA, each acceptance criterion, exact command/procedure, observed result, PASS/FAIL/BLOCKED, artifact/run reference and known limitations. Include rollback, exact-text round trip, literal `%`/`_`, deterministic ordering, provenance, `UNKNOWN`, exact table allowlist, E2E and Foundation outage regression. Use synthetic data only.
 
-- [ ] **Step 2: Create the MCF PRF**
+- [ ] **Step 2: Create MCF phase traceability pack**
 
-`PHASE-01-PLAN.md` copies the approved boundary/acceptance and identifies Slice 01 as risk class B because it establishes personal-memory behavior even though laboratory evidence is synthetic.
+Classify this slice as risk class B because it establishes personal-memory behavior while laboratory evidence remains synthetic.
 
-`PHASE-01-REPORT.md` records executed task commits, deviations and recoveries.
+Required content:
 
-`PHASE-01-VALIDATION.txt` contains the concise command/result matrix.
+```text
+PHASE-01-PLAN.md            approved objective/scope/acceptance/agents/authorization
+PHASE-01-REPORT.md          task commits, execution, deviations, failures/recoveries
+PHASE-01-VALIDATION.txt     concise command/result matrix
+PHASE-01-VALIDATION-FULL.txt safe expanded outputs or exact CI references
+PHASE-01-SMOKE.txt          built-app store/query/provenance/UNKNOWN smoke
+PHASE-01-CHECKPOINT.yaml    branch, HEAD, state, findings, blockers, next action
+PHASE-01-DECISIONS.md       explicit human auth + Option A/spec/review/gate decisions
+README.md                   recovery order and result
+```
 
-`PHASE-01-VALIDATION-FULL.txt` contains safe expanded outputs or exact GitHub/CI references, with secrets and real personal data excluded.
-
-`PHASE-01-SMOKE.txt` records the built-app Playwright store/query/UNKNOWN flow.
-
-`PHASE-01-CHECKPOINT.yaml` records branch, HEAD, current state, open findings, next action and the prohibition on real data.
-
-`PHASE-01-DECISIONS.md` records the human authorization to enter Slice 01, approval of Option A, approval of the written spec, the deterministic retrieval decision and all review/gate decisions produced during execution.
-
-`README.md` defines recovery order for the PRF.
-
-Generate the manifest only after the other PRF files are final:
+Generate manifest last:
 
 ```bash
 cd artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY
@@ -1030,11 +1326,11 @@ sha256sum PHASE-01-PLAN.md PHASE-01-REPORT.md PHASE-01-VALIDATION.txt \
 sha256sum -c PHASE-01-ARTIFACT-MANIFEST.sha256
 ```
 
-Expected: every manifest entry `OK`.
+Expected: every entry `OK`.
 
-- [ ] **Step 3: Update canonical project state to review readiness**
+- [ ] **Step 3: Persist review-ready canonical state on the branch**
 
-Only after all local tests/evidence are PASS, set branch state to:
+`docs/STATE.md`, phase record, resume card and checkpoint must state:
 
 ```text
 Current phase: SLICE 01 — IN_REVIEW
@@ -1042,11 +1338,12 @@ FOUNDATION: COMPLETE
 Slice 01: IN_REVIEW
 Real data: NOT AUTHORIZED
 Pilot: NOT AUTHORIZED
+Slice 02: NOT STARTED / NOT AUTHORIZED
 ```
 
-Record the branch and evidence path. Do not mark Slice 01 COMPLETE and do not authorize Slice 02.
+Include evidence/PRF paths. Do not write `COMPLETE`.
 
-- [ ] **Step 4: Run documentation and full regression checks after state/evidence changes**
+- [ ] **Step 4: Re-run docs-state regression**
 
 ```bash
 pnpm format:check
@@ -1059,34 +1356,34 @@ pnpm build
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit review-readiness evidence**
+- [ ] **Step 5: Commit evidence/review readiness**
 
 ```bash
 git add docs artifacts
 git commit -m "docs: prepare Slice 01 review gate"
 ```
 
-- [ ] **Step 6: Push branch and open one Slice 01 PR**
+- [ ] **Step 6: Open exactly one Slice 01 PR**
 
-PR title:
+Title:
 
 ```text
 SLICE 01: trusted text memory
 ```
 
-PR body must state exact boundary, design/spec path, implementation-plan path, evidence path, HEAD SHA, CI run when available, open Critical/Important findings, and explicit exclusions. It must say that a green CI does not authorize merge.
+Body includes boundary, spec path, plan path, evidence path, PRF path, HEAD SHA, explicit exclusions, real-data prohibition, and the statement that green CI does not authorize merge.
 
-- [ ] **Step 7: Require independent review before gate**
+- [ ] **Step 7: Perform independent full-diff review**
 
-Run code review over the complete PR diff. Classify findings Critical / Important / Minor. Fix every Critical and Important finding, rerun the affected tests and the complete acceptance sequence, refresh evidence/PRF and push a new reviewed HEAD.
+Classify findings Critical / Important / Minor. Fix every Critical and Important finding. For each fix, rerun the directly affected RED/GREEN test plus the complete acceptance sequence, then refresh evidence/PRF so it refers to the final reviewed HEAD.
 
-- [ ] **Step 8: Require canonical GitHub CI on the final reviewed HEAD**
+- [ ] **Step 8: Require canonical PR CI on final reviewed HEAD**
 
-The pull-request workflow must complete `success` on the same reviewed HEAD. Capture run ID and job ID in project evidence and PRF.
+Capture workflow run ID/job ID and require `conclusion: success` on the same reviewed HEAD. Record 0 open Critical and 0 open Important findings in evidence and PR body.
 
-- [ ] **Step 9: Stop at the Slice 01 gate**
+- [ ] **Step 9: Stop before merge at the gate boundary**
 
-Final allowed state for implementation execution:
+Required terminal execution state:
 
 ```text
 SLICE 01 — IN_REVIEW / READY_FOR_GATE
@@ -1098,30 +1395,29 @@ Real data — NOT AUTHORIZED
 Slice 02 — NOT STARTED / NOT AUTHORIZED
 ```
 
-Do not merge or mark `COMPLETE` without the gate/authority required by current project governance.
+Merge/completion requires the authority defined by current project governance; this implementation plan does not consume that future gate.
 
 ---
 
 ## Plan Self-Review Checklist
 
-Before execution begins, verify:
-
-- [ ] Every approved spec acceptance criterion maps to at least one task/test above.
-- [ ] Exact text preservation is tested, including valid leading/trailing whitespace.
-- [ ] `Fact.content = Evidence.content` is both a domain and integration invariant.
-- [ ] Registration rollback is proven after a deliberately forced mid-transaction failure.
-- [ ] Query uses `strpos(lower(...), lower(parameter))`, not LIKE/ILIKE/Prisma `contains`.
-- [ ] Literal `%` and `_` behavior is tested.
-- [ ] Newest-recordedAt then factId ordering is tested.
-- [ ] FOUND provenance and UNKNOWN/no-fabrication behavior are tested.
-- [ ] No update route/store method for Evidence or Ledger is introduced.
-- [ ] Foundation zero-table CI assertion is deliberately replaced by exact Slice 01 table allowlist.
-- [ ] Existing health/readiness/outage regressions remain executable.
-- [ ] Browser flow uses built apps + real PostgreSQL.
-- [ ] No real sensitive data appears in fixtures, logs, screenshots, docs or commits.
-- [ ] MCF PRF and project evidence conventions are both satisfied.
-- [ ] Execution stops before merge/gate completion.
+- [ ] All 14 approved acceptance criteria have executable proof.
+- [ ] 4000/200 limits are shared, tested and reflected in UI attributes.
+- [ ] Leading/trailing memory whitespace round-trips unchanged.
+- [ ] `Fact.content === Evidence.content` and CurrentFact equality are executable invariants.
+- [ ] Registration rollback is proven using a deliberate mid-transaction PK collision.
+- [ ] Query uses parameterized `strpos(lower(...), lower(parameter))`; not `LIKE`, `ILIKE` or Prisma `contains`.
+- [ ] `%` and `_` literal behavior is tested.
+- [ ] Newest `recordedAt`, then ascending `factId`, is tested.
+- [ ] FOUND provenance is tested.
+- [ ] UNKNOWN returns no fabricated answer.
+- [ ] Evidence/Ledger expose no update path.
+- [ ] Foundation zero-table assertion is replaced by the exact five-table Slice 01 allowlist.
+- [ ] Foundation health/readiness/outage and browser E2E remain green.
+- [ ] No real sensitive data appears in tests, logs, docs or screenshots.
+- [ ] Project evidence convention and MCF PRF are both satisfied.
+- [ ] Final state is review/gate readiness, not merge/completion.
 
 ## Execution Handoff
 
-The implementation plan is complete only when executed task-by-task with TDD and review checkpoints. Recommended execution mode is **Subagent-Driven Development**, one fresh worker per task with spec-compliance review followed by code-quality review. Inline execution is permitted only through the `executing-plans` workflow and must preserve the same task gates.
+Recommended execution: **Subagent-Driven Development** — one fresh implementation worker per task, then spec-compliance review and code-quality review before proceeding. Alternative: **Inline Execution** through `superpowers:executing-plans`, preserving the same task checkpoints and gate boundary.
