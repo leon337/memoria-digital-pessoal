@@ -28,18 +28,12 @@ const memoryStoreProvider = {
 const memoryServiceProvider = {
   provide: MEMORY_SERVICE,
   inject: [MEMORY_STORE],
-  useFactory: (store: MemoryStore) =>
-    new MemoryService({ store, now: () => new Date(), createId }),
+  useFactory: (store: MemoryStore) => new MemoryService({ store, now: () => new Date(), createId }),
 };
 
 @Module({
   imports: [EnvModule],
   controllers: [HealthController, MemoryController],
-  providers: [
-    HealthService,
-    prismaProvider,
-    memoryStoreProvider,
-    memoryServiceProvider,
-  ],
+  providers: [HealthService, prismaProvider, memoryStoreProvider, memoryServiceProvider],
 })
 export class AppModule {}

@@ -29,10 +29,7 @@ describe('StoreMemoryForm', () => {
     await user.click(screen.getByRole('button', { name: 'Guardar lembrança' }));
 
     expect(createMemoryMock).toHaveBeenCalledTimes(1);
-    expect(createMemoryMock).toHaveBeenCalledWith(
-      'http://api',
-      '  Minha irmã se chama Ana.  ',
-    );
+    expect(createMemoryMock).toHaveBeenCalledWith('http://api', '  Minha irmã se chama Ana.  ');
     expect(await screen.findByRole('status')).toHaveTextContent('Lembrança guardada.');
     expect(input).toHaveValue('');
   });

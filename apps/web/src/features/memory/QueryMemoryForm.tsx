@@ -2,13 +2,7 @@ import { MEMORY_QUERY_MAX_LENGTH, type MemoryQueryResponse } from '@mdp/contract
 import { useState, type FormEvent } from 'react';
 import { queryMemory } from '../../lib/memory-api.js';
 
-export function QueryMemoryForm({
-  apiBaseUrl,
-  enabled,
-}: {
-  apiBaseUrl: string;
-  enabled: boolean;
-}) {
+export function QueryMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; enabled: boolean }) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MemoryQueryResponse | null>(null);

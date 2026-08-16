@@ -26,10 +26,7 @@ describe('memory API client', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await createMemory(
-      'http://127.0.0.1:3000/',
-      '  Minha irmã se chama Ana.  ',
-    );
+    const result = await createMemory('http://127.0.0.1:3000/', '  Minha irmã se chama Ana.  ');
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3000/memories', {

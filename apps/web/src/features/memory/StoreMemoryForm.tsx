@@ -2,19 +2,11 @@ import { MEMORY_TEXT_MAX_LENGTH } from '@mdp/contracts';
 import { useState, type FormEvent } from 'react';
 import { createMemory } from '../../lib/memory-api.js';
 
-export function StoreMemoryForm({
-  apiBaseUrl,
-  enabled,
-}: {
-  apiBaseUrl: string;
-  enabled: boolean;
-}) {
+export function StoreMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; enabled: boolean }) {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<
-    | { kind: 'success'; text: string }
-    | { kind: 'error'; text: string }
-    | null
+    { kind: 'success'; text: string } | { kind: 'error'; text: string } | null
   >(null);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {

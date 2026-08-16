@@ -19,10 +19,7 @@ function endpoint(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/$/, '')}${path}`;
 }
 
-export async function createMemory(
-  baseUrl: string,
-  text: string,
-): Promise<CreateMemoryResponse> {
+export async function createMemory(baseUrl: string, text: string): Promise<CreateMemoryResponse> {
   const response = await fetch(endpoint(baseUrl, '/memories'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -34,10 +31,7 @@ export async function createMemory(
   return createMemoryResponseSchema.parse(await response.json());
 }
 
-export async function queryMemory(
-  baseUrl: string,
-  query: string,
-): Promise<MemoryQueryResponse> {
+export async function queryMemory(baseUrl: string, query: string): Promise<MemoryQueryResponse> {
   const search = new URLSearchParams({ q: query });
   const response = await fetch(endpoint(baseUrl, `/query?${search.toString()}`));
   if (!response.ok) {
