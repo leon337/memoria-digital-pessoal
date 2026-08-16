@@ -12,13 +12,18 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
-    "format:check": "prettier . --check"
+    "format:check": "prettier . --check",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy"
   },
   "devDependencies": {
     "@eslint/js": "latest",
+    "dotenv": "latest",
     "eslint": "latest",
     "globals": "latest",
     "prettier": "latest",
+    "prisma": "latest",
     "typescript": "6.0.3",
     "typescript-eslint": "latest",
     "vitest": "latest"

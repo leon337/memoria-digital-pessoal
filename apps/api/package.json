@@ -16,7 +16,10 @@
     "@nestjs/common": "latest",
     "@nestjs/core": "latest",
     "@nestjs/platform-express": "latest",
+    "@prisma/adapter-pg": "latest",
+    "@prisma/client": "latest",
     "dotenv": "latest",
+    "pg": "latest",
     "reflect-metadata": "latest",
     "rxjs": "latest",
     "zod": "latest"
@@ -26,6 +29,7 @@
     "@nestjs/testing": "latest",
     "@types/express": "latest",
     "@types/node": "latest",
+    "@types/pg": "latest",
     "@types/supertest": "latest",
     "supertest": "latest"
   }
