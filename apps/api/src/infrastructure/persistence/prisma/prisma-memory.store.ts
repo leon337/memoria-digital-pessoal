@@ -20,6 +20,8 @@ const unavailableCodes = new Set([
   'P1002',
   'P1008',
   'P1017',
+  'P2024',
+  'P2037',
   'ECONNREFUSED',
   'ECONNRESET',
   '57P01',
