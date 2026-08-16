@@ -16,7 +16,8 @@
 - TECH-01 Q1–Q16: COMPLETE
 - PLAN-01 Q1–Q16: COMPLETE
 - PLAN-01 consolidation: COMPLETE
-- BOOT-01: IN PROGRESS until checkpoint verification closes it
+- BOOT-01: COMPLETE
+- Foundation: NOT STARTED / NOT AUTHORIZED
 - Product implementation: NOT STARTED
 - Real sensitive data: NOT AUTHORIZED
 - Pilot: NOT AUTHORIZED
@@ -41,8 +42,10 @@ Read in this order:
 - No silent overwrite of originals or conflicts.
 - Lack of evidence means UNKNOWN.
 - Real sensitive data requires Pilot Readiness plus explicit HUMAN_GATE by LEANDRO.
-- BOOT-01 does not authorize Foundation implementation.
+- BOOT-01 completion does not authorize Foundation implementation.
 
-## Next intended boundary
+## Next proposed boundary
 
-After BOOT-01 closes, the next proposed phase is `FOUNDATION — Repository & Product Bootstrap`, but it must not start without the next explicit authorization/gate.
+`FOUNDATION — Repository & Product Bootstrap`
+
+It must not start without a new explicit authorization/gate from LEANDRO.
