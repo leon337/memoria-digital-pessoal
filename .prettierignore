@@ -5,4 +5,5 @@ playwright-report
 test-results
 apps/api/src/infrastructure/persistence/prisma/generated
 docs
+README.md
 pnpm-lock.yaml
