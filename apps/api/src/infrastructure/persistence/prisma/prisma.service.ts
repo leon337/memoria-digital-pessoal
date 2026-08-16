@@ -15,6 +15,10 @@ export class PrismaService {
     this.client = new PrismaClient({ adapter });
   }
 
+  async run<T>(operation: (client: PrismaClient) => Promise<T>): Promise<T> {
+    return operation(this.client);
+  }
+
   async ping(): Promise<void> {
     await this.client.$queryRaw`SELECT 1`;
   }
