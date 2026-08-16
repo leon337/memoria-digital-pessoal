@@ -43,6 +43,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
+      - name: Verify Slice 01 PRF manifest
+        working-directory: artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY
+        run: sha256sum -c PHASE-01-ARTIFACT-MANIFEST.sha256
       - run: pnpm test
       - run: pnpm build
       - name: Verify workspace runtime import
