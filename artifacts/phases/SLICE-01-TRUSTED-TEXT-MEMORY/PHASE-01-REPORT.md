@@ -40,13 +40,16 @@ The implementation remains laboratory-only and synthetic-data-only. No AI, embed
 ## Review findings and recovery
 
 MESTRE technical review previously fixed two Important findings:
+
 1. synthetic-only restriction missing from the functional UI;
 2. web copy drift from the approved plan.
 
 A subsequent Codex review identified one P2 availability-mapping defect:
+
 - Prisma `P2024` and `P2037` connection-capacity failures were not mapped to `MemoryStoreUnavailableError`.
 
 TDD remediation:
+
 - RED test-only commit: `b5199578a570ed13e49be92464e1e14d0ca2eb6c`.
 - RED CI: `31972074965` / job `95225939147` — exactly 2 new tests failed; 51 existing tests passed.
 - Minimal fix commit: `de8185ed1a152c12828bee02a4c8acc3398a6d7d`.
