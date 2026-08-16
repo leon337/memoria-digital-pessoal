@@ -47,9 +47,7 @@ export interface CreateTextMemoryRecordInput {
   }>;
 }
 
-export function createTextMemoryRecord(
-  input: CreateTextMemoryRecordInput,
-): TextMemoryRecord {
+export function createTextMemoryRecord(input: CreateTextMemoryRecordInput): TextMemoryRecord {
   const { text, recordedAt, ids } = input;
 
   const memory = Object.freeze({

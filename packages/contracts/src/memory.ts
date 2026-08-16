@@ -8,17 +8,10 @@ export const createMemoryRequestSchema = z.object({
     .string()
     .min(1)
     .max(MEMORY_TEXT_MAX_LENGTH)
-    .refine(
-      (value) => value.trim().length > 0,
-      'text must contain non-whitespace content',
-    ),
+    .refine((value) => value.trim().length > 0, 'text must contain non-whitespace content'),
 });
 
-export const memoryQuerySchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(MEMORY_QUERY_MAX_LENGTH);
+export const memoryQuerySchema = z.string().trim().min(1).max(MEMORY_QUERY_MAX_LENGTH);
 
 export const createMemoryResponseSchema = z.object({
   memory: z.object({

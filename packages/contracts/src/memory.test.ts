@@ -9,12 +9,11 @@ import {
 
 describe('memory contracts', () => {
   it('accepts the exact memory limit and preserves valid surrounding whitespace', () => {
+    expect(createMemoryRequestSchema.parse({ text: '  memória sintética  ' }).text).toBe(
+      '  memória sintética  ',
+    );
     expect(
-      createMemoryRequestSchema.parse({ text: '  memória sintética  ' }).text,
-    ).toBe('  memória sintética  ');
-    expect(
-      createMemoryRequestSchema.parse({ text: 'x'.repeat(MEMORY_TEXT_MAX_LENGTH) })
-        .text,
+      createMemoryRequestSchema.parse({ text: 'x'.repeat(MEMORY_TEXT_MAX_LENGTH) }).text,
     ).toHaveLength(MEMORY_TEXT_MAX_LENGTH);
   });
 
@@ -34,9 +33,7 @@ describe('memory contracts', () => {
       MEMORY_QUERY_MAX_LENGTH,
     );
     expect(() => memoryQuerySchema.parse('   ')).toThrow();
-    expect(() =>
-      memoryQuerySchema.parse('x'.repeat(MEMORY_QUERY_MAX_LENGTH + 1)),
-    ).toThrow();
+    expect(() => memoryQuerySchema.parse('x'.repeat(MEMORY_QUERY_MAX_LENGTH + 1))).toThrow();
   });
 
   it('accepts only coherent FOUND or UNKNOWN response shapes', () => {

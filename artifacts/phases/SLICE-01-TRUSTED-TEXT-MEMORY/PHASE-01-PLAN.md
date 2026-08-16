@@ -7,6 +7,7 @@ State: EXECUTING
 Branch: slice/01-trusted-text-memory
 
 Approved inputs:
+
 - Design: docs/superpowers/specs/2026-08-16-slice-01-trusted-text-memory-design.md
 - Implementation plan: docs/superpowers/plans/2026-08-16-slice-01-trusted-text-memory-implementation.md
 - LEANDRO authorization to enter Slice 01: 2026-08-16
