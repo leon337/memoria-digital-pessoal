@@ -1,23 +1,30 @@
 # BOOT-01 — Repository & Canonical State Bootstrap
 
+## Status
+
+`COMPLETE`
+
 ## Objective
 
 Create the official project repository and make the project recoverable from canonical repository state before any product implementation begins.
 
-## In scope
+## Completed scope
 
-- repository identity;
-- private visibility;
-- README;
-- canonical state;
-- governance;
-- decision lineage;
-- implementation roadmap;
-- documentation folders;
-- evidence conventions;
-- initial checkpoint.
+- repository identity verified;
+- private visibility verified;
+- README created;
+- canonical state created;
+- governance created;
+- Product Discovery decision lineage persisted;
+- Conceptual Architecture decision lineage persisted;
+- TECH-01 decision lineage persisted;
+- PLAN-01 decision lineage persisted;
+- implementation roadmap persisted;
+- resume card and recovery order created;
+- repository-only recovery validated by reading the files back from GitHub;
+- initial checkpoint prepared from verified repository state.
 
-## Out of scope
+## Explicitly not implemented
 
 - React application;
 - NestJS application;
@@ -35,19 +42,18 @@ Create the official project repository and make the project recoverable from can
 - Visibility: `private`
 - Default branch: `main`
 
-## Definition of Done
+## Definition of Done result
 
-BOOT-01 is complete only when:
-1. repository exists;
-2. canonical files are committed;
-3. decision lineage is recoverable from repository;
-4. state can be recovered without chat history;
-5. implementation remains NOT STARTED;
-6. real data remains NOT AUTHORIZED;
-7. initial checkpoint records verified repository state.
+1. repository exists — PASS
+2. canonical files committed — PASS
+3. decision lineage recoverable from repository — PASS
+4. state recoverable without chat history — PASS
+5. implementation remains NOT STARTED — PASS
+6. real data remains NOT AUTHORIZED — PASS
+7. checkpoint records verified repository state — completed as the final BOOT-01 action
 
 ## Next boundary
 
 `FOUNDATION — Repository & Product Bootstrap`
 
-Starting Foundation requires a new explicit gate; BOOT-01 completion alone does not authorize product implementation.
+Starting Foundation requires a new explicit gate from LEANDRO. BOOT-01 completion alone does not authorize product implementation.
