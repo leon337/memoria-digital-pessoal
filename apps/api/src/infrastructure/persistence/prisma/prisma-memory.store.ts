@@ -1,8 +1,16 @@
 import type { TextMemoryRecord } from '@mdp/domain';
-import type { MemoryStore } from '../../../memories/memory.store.js';
+import type { MemoryStore, QueryHit, StoredMemory } from '../../../memories/memory.store.js';
 import { PrismaService } from './prisma.service.js';
 
-export class PrismaMemoryStore implements Pick<MemoryStore, 'create'> {
+interface QueryHitRow {
+  memoryId: string;
+  evidenceId: string;
+  factId: string;
+  content: string;
+  recordedAt: Date;
+}
+
+export class PrismaMemoryStore implements MemoryStore {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(record: TextMemoryRecord): Promise<void> {
@@ -54,6 +62,72 @@ export class PrismaMemoryStore implements Pick<MemoryStore, 'create'> {
           },
         });
       });
+    });
+  }
+
+  async getById(id: string): Promise<StoredMemory | null> {
+    return this.prisma.run(async (client) => {
+      const memory = await client.memory.findUnique({ where: { id } });
+      if (!memory) {
+        return null;
+      }
+
+      const [evidence, fact] = await Promise.all([
+        client.evidence.findFirst({ where: { memoryId: id }, orderBy: { createdAt: 'asc' } }),
+        client.fact.findFirst({ where: { memoryId: id }, orderBy: { createdAt: 'asc' } }),
+      ]);
+      if (!evidence || !fact) {
+        throw new Error('Slice 01 persistence invariant violated: missing evidence or fact');
+      }
+      if (
+        memory.occurredAt !== null ||
+        memory.temporalPrecision !== 'unknown' ||
+        evidence.kind !== 'text' ||
+        fact.kind !== 'autobiographical_statement' ||
+        fact.evidenceId !== evidence.id ||
+        fact.content !== evidence.content
+      ) {
+        throw new Error('Slice 01 persistence invariant violated: inconsistent memory record');
+      }
+
+      return {
+        memory: {
+          id: memory.id,
+          recordedAt: memory.recordedAt,
+          occurredAt: null,
+          temporalPrecision: 'unknown',
+        },
+        evidence: {
+          id: evidence.id,
+          kind: 'text',
+          content: evidence.content,
+          createdAt: evidence.createdAt,
+        },
+        fact: {
+          id: fact.id,
+          kind: 'autobiographical_statement',
+          content: fact.content,
+          createdAt: fact.createdAt,
+        },
+      };
+    });
+  }
+
+  async findLiteral(query: string): Promise<QueryHit | null> {
+    return this.prisma.run(async (client) => {
+      const rows = await client.$queryRaw<QueryHitRow[]>`
+        SELECT
+          memory_id AS "memoryId",
+          evidence_id AS "evidenceId",
+          fact_id AS "factId",
+          content,
+          recorded_at AS "recordedAt"
+        FROM current_facts
+        WHERE strpos(lower(content), lower(${query})) > 0
+        ORDER BY recorded_at DESC, fact_id ASC
+        LIMIT 1
+      `;
+      return rows[0] ?? null;
     });
   }
 }

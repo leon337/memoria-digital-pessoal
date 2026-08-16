@@ -12,15 +12,21 @@ if (!databaseUrl) {
 const prisma = new PrismaService({ databaseUrl });
 const store = new PrismaMemoryStore(prisma);
 
-function buildRecord(text = '  Minha irmã se chama Ana.  ') {
+interface RecordOptions {
+  text?: string;
+  recordedAt?: Date;
+  factId?: string;
+}
+
+function buildRecord(options: RecordOptions = {}) {
   return createTextMemoryRecord({
-    text,
-    recordedAt: new Date('2026-08-16T09:00:00.000Z'),
+    text: options.text ?? '  Minha irmã se chama Ana.  ',
+    recordedAt: options.recordedAt ?? new Date('2026-08-16T09:00:00.000Z'),
     ids: {
       memoryId: createId(),
       evidenceId: createId(),
       eventId: createId(),
-      factId: createId(),
+      factId: options.factId ?? createId(),
     },
   });
 }
@@ -110,7 +116,69 @@ describe('PrismaMemoryStore integration', () => {
       `);
     });
 
-    await expect(store.create(buildRecord('Falha sintética.'))).rejects.toThrow();
+    await expect(store.create(buildRecord({ text: 'Falha sintética.' }))).rejects.toThrow();
     expect(await counts()).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it('reads the original evidence and deterministic fact by memory ID', async () => {
+    const record = buildRecord();
+    await store.create(record);
+
+    const stored = await store.getById(record.memory.id);
+
+    expect(stored?.memory.id).toBe(record.memory.id);
+    expect(stored?.evidence.id).toBe(record.evidence.id);
+    expect(stored?.evidence.content).toBe(record.evidence.content);
+    expect(stored?.fact.id).toBe(record.fact.id);
+    expect(stored?.fact.content).toBe(stored?.evidence.content);
+    await expect(store.getById(createId())).resolves.toBeNull();
+  });
+
+  it('matches literal substrings case-insensitively', async () => {
+    const record = buildRecord();
+    await store.create(record);
+
+    const hit = await store.findLiteral('ANA');
+
+    expect(hit).toMatchObject({
+      memoryId: record.memory.id,
+      evidenceId: record.evidence.id,
+      factId: record.fact.id,
+      content: record.fact.content,
+    });
+  });
+
+  it('treats percent and underscore as literal characters rather than wildcards', async () => {
+    const literal = buildRecord({ text: 'Código sintético: 100%_seguro.' });
+    await store.create(literal);
+
+    await expect(store.findLiteral('%_')).resolves.toMatchObject({ factId: literal.fact.id });
+    await expect(store.findLiteral('não%existe')).resolves.toBeNull();
+    await expect(store.findLiteral('não_existe')).resolves.toBeNull();
+  });
+
+  it('orders matches by newest recordedAt and then factId ascending', async () => {
+    const older = buildRecord({
+      text: 'alvo antigo',
+      recordedAt: new Date('2026-08-16T08:00:00.000Z'),
+    });
+    const tieHigh = buildRecord({
+      text: 'alvo empate alto',
+      recordedAt: new Date('2026-08-16T10:00:00.000Z'),
+      factId: '0198c000-0000-7000-8000-000000000002',
+    });
+    const tieLow = buildRecord({
+      text: 'alvo empate baixo',
+      recordedAt: new Date('2026-08-16T10:00:00.000Z'),
+      factId: '0198c000-0000-7000-8000-000000000001',
+    });
+    await store.create(older);
+    await store.create(tieHigh);
+    await store.create(tieLow);
+
+    const hit = await store.findLiteral('alvo');
+
+    expect(hit?.factId).toBe(tieLow.fact.id);
+    expect(hit?.recordedAt).toEqual(tieLow.memory.recordedAt);
   });
 });
