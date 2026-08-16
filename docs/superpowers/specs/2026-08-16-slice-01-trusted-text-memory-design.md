@@ -33,7 +33,11 @@ The slice proves that the system can preserve what the user explicitly records, 
 
 The original user-entered text is preserved verbatim as Evidence. The slice derives a minimal structured Fact whose semantic payload is the explicit autobiographical statement itself; Slice 01 does not attempt semantic decomposition, entity extraction, relation inference, summarization, or generative interpretation.
 
-Textual retrieval is deterministic and database-backed. A successful answer returns the matched statement plus provenance to the original Evidence. A query without sufficient matching evidence returns `UNKNOWN`.
+In Slice 01, `Fact.content` must equal `Evidence.content`. The separate Fact identity exists to establish the domain boundary and provenance chain without pretending that semantic extraction has occurred.
+
+Textual retrieval is deterministic and database-backed. A successful answer returns the matched recorded statement plus provenance to the original Evidence. A query without matching evidence returns `UNKNOWN`.
+
+A `FOUND` result means only that a matching user-recorded statement exists. It is not external verification that the statement is objectively true.
 
 ### Rejected — B: Manual structured form
 
@@ -70,8 +74,10 @@ Minimum fields:
 
 - `id`: UUID v7
 - `recordedAt`: timestamp generated at successful registration
-- `occurredAt`: nullable; remains `null` unless an explicit occurrence time is supplied by a future authorized capability
-- `temporalPrecision`: `unknown` in Slice 01 unless later expanded by an authorized boundary
+- `occurredAt`: nullable and always `null` in Slice 01
+- `temporalPrecision`: `unknown` in Slice 01
+
+Slice 01 has no occurrence-time input. It must not infer an occurrence time from the text.
 
 Memory does not duplicate the original text. The canonical content lives in Evidence.
 
@@ -84,11 +90,14 @@ Minimum fields:
 - `id`: UUID v7
 - `memoryId`: parent Memory
 - `kind`: `text`
-- `content`: exact text submitted by the user after transport-level decoding; no semantic rewriting
+- `content`: exact text submitted by the user after transport-level decoding; no trimming or semantic rewriting before persistence
 - `createdAt`
 
 Rules:
 
+- the original submitted string must contain between 1 and 4000 characters inclusive;
+- whitespace-only content is invalid, evaluated with `trim()` only for the emptiness check;
+- leading/trailing whitespace is preserved if the input is otherwise valid;
 - content is append-only/immutable;
 - no update endpoint exists in Slice 01;
 - corrections belong to Slice 02;
@@ -121,10 +130,10 @@ Minimum fields:
 - `memoryId`
 - `evidenceId`
 - `kind`: `autobiographical_statement`
-- `content`: the explicit statement used for deterministic retrieval
+- `content`: exact same string as the referenced `Evidence.content`
 - `createdAt`
 
-Slice 01 does not extract entities, predicates, relations, emotions, medical interpretations, or inferred meaning. `Fact.content` remains traceable to the Evidence content.
+Slice 01 does not extract entities, predicates, relations, emotions, medical interpretations, or inferred meaning. The equality `Fact.content = Evidence.content` is an executable invariant for this boundary.
 
 ### CurrentFact
 
@@ -138,7 +147,7 @@ Minimum fields:
 - `content`
 - `recordedAt`
 
-It is not canonical truth. It may be rebuilt from Evidence + Ledger + Fact data.
+`CurrentFact.content` mirrors the referenced Fact content. CurrentFact is not canonical truth and may be rebuilt from canonical records.
 
 ## Persistence and transaction boundary
 
@@ -168,9 +177,10 @@ Request:
 
 Validation:
 
-- text is required;
-- text must contain non-whitespace content;
-- a conservative maximum length must be enforced in the implementation plan and shared contract;
+- `text` is required and must be a string;
+- original string length: `1..4000` characters inclusive;
+- `text.trim().length` must be greater than zero;
+- persistence preserves the original valid string rather than the trimmed value;
 - no HTML execution or rich-text semantics are required.
 
 Success: `201 Created`.
@@ -203,18 +213,37 @@ A missing memory returns the existing safe `NOT_FOUND` API envelope.
 
 ### `GET /query?q=<text>`
 
-Performs deterministic textual retrieval over CurrentFact content using PostgreSQL capabilities available without introducing embeddings or an external search service.
+Performs deterministic literal textual retrieval over CurrentFact content.
 
-Initial retrieval requirements:
+Query validation:
 
-- case-insensitive;
-- deterministic ordering;
-- stable tie-breaking;
-- no semantic inference;
-- no generated paraphrase;
-- result must carry provenance.
+- `q` is required;
+- trim `q` for matching;
+- trimmed query length: `1..200` characters inclusive.
 
-A successful response returns one best deterministic match for Slice 01 plus its Evidence reference.
+Precise Slice 01 matching rule:
+
+```text
+candidate matches when:
+strpos(lower(CurrentFact.content), lower(trim(q))) > 0
+```
+
+The implementation must use equivalent parameterized PostgreSQL/Prisma behavior and must not interpolate raw query text into SQL.
+
+Consequences:
+
+- matching is case-insensitive;
+- matching is literal substring retrieval, not semantic search;
+- `%` and `_` have no wildcard meaning;
+- accents remain significant under the database behavior selected by Foundation;
+- no stemming, synonym expansion, entity resolution or question interpretation occurs.
+
+If multiple rows match, ordering is deterministic:
+
+1. newest `recordedAt` first;
+2. `factId` ascending as stable tie-breaker.
+
+A successful response returns the first ordered match plus its Evidence reference.
 
 Example:
 
@@ -230,6 +259,8 @@ Example:
 }
 ```
 
+For the stored example above, queries such as `Ana`, `minha irmã`, or `SE CHAMA` match; a natural-language question whose literal text is not contained in the statement is allowed to return `UNKNOWN` in Slice 01.
+
 If no evidence satisfies the deterministic match rule:
 
 ```json
@@ -240,8 +271,6 @@ If no evidence satisfies the deterministic match rule:
 }
 ```
 
-The implementation plan must define the precise lexical matching expression and ordering so identical inputs produce reproducible results.
-
 ## Web experience
 
 The PWA exposes two primary smartphone-first actions.
@@ -250,14 +279,16 @@ The PWA exposes two primary smartphone-first actions.
 
 - heading and explicit label: `Guardar uma lembrança`;
 - large multiline text input;
+- maximum input length aligned to the API limit of 4000 characters;
 - large primary save control;
-- visible success confirmation after persisted API response;
+- visible success confirmation only after the persisted API response;
 - failure does not display a false success state.
 
 ### Consult memories
 
 - heading and explicit label: `Consultar minhas lembranças`;
-- text query input;
+- text query input with a 200-character maximum aligned to the API;
+- helper text makes clear that Slice 01 searches words/phrases literally rather than understanding free-form questions;
 - result displays the stored statement;
 - source/provenance is visible through a human-readable source indicator;
 - `UNKNOWN` is presented clearly when no matching evidence exists.
@@ -279,13 +310,14 @@ The existing structured safe API error envelope remains mandatory.
 
 Required behavior:
 
-- malformed/empty input → safe validation error;
+- malformed/empty/oversized memory input → safe validation error;
+- malformed/empty/oversized query → safe validation error;
 - missing memory → safe not-found error;
 - database unavailable → safe service-unavailable behavior where applicable;
 - internal exceptions must not leak SQL, credentials, stack traces, or evidence content unnecessarily;
 - request correlation ID remains present for failures.
 
-No automatic retry may create duplicate canonical memory records.
+The web client must not automatically retry `POST /memories`. A user-initiated repeated submission may create a second memory; deduplication/idempotency is not claimed by Slice 01.
 
 ## Security and privacy boundary
 
@@ -324,6 +356,7 @@ Authentication hardening, encryption-at-rest application design, recovery, step-
 Prove:
 
 - UUID/global ID contracts remain valid;
+- `Fact.content = Evidence.content` for the Slice 01 creation flow;
 - deterministic domain objects cannot silently mutate canonical Evidence/Ledger concepts;
 - query result mapping preserves provenance;
 - `UNKNOWN` is explicit rather than represented as fabricated content.
@@ -334,8 +367,11 @@ Against real PostgreSQL, prove:
 
 - the full registration transaction creates all five required records;
 - forced failure rolls back the complete transaction;
-- original Evidence content round-trips unchanged;
-- query retrieves a stored fact deterministically;
+- original Evidence content, including valid leading/trailing whitespace, round-trips unchanged;
+- Fact content equals its Evidence content;
+- query is case-insensitive and uses literal substring semantics;
+- `%` and `_` do not act as query wildcards;
+- multiple matches follow newest-`recordedAt`, then `factId` ordering;
 - missing query evidence returns `UNKNOWN`;
 - retrieved answer references the correct Evidence;
 - health/readiness regression remains green.
@@ -353,10 +389,10 @@ Prove:
 With synthetic data, prove:
 
 1. open the built PWA;
-2. store a text memory;
+2. store `Minha irmã se chama Ana.`;
 3. receive visible persisted success;
-4. query using matching text/terms;
-5. see the stored statement;
+4. query `Ana`;
+5. see the exact stored statement;
 6. see source/provenance indication;
 7. query unrelated text;
 8. see explicit `UNKNOWN` behavior.
@@ -369,16 +405,18 @@ Slice 01 implementation is acceptable only when all criteria below are reproduci
 
 1. Registering text atomically creates Memory + Evidence + `MEMORY_CREATED` + Fact + CurrentFact.
 2. Original text is preserved and retrievable unchanged.
-3. Evidence and Ledger cannot be silently overwritten through Slice 01 behavior.
-4. A deterministic textual query retrieves a stored fact.
-5. A found answer carries Memory/Fact/Evidence provenance.
-6. A query with no matching evidence returns `UNKNOWN` and no fabricated answer.
-7. A forced persistence failure leaves no partial canonical/projection state.
-8. Unit, integration, architecture/invariant and browser E2E tests pass.
-9. Foundation regression checks continue to pass.
-10. Only synthetic non-sensitive test data is used.
-11. No out-of-scope infrastructure or AI capability is introduced.
-12. Evidence, review, CI and the Slice 01 gate are complete before merge.
+3. `Fact.content` exactly equals its referenced `Evidence.content` in Slice 01.
+4. Evidence and Ledger cannot be silently overwritten through Slice 01 behavior.
+5. A deterministic case-insensitive literal substring query retrieves a stored fact.
+6. Multiple matches follow the specified stable ordering.
+7. A found answer carries Memory/Fact/Evidence provenance.
+8. A query with no matching evidence returns `UNKNOWN` and no fabricated answer.
+9. A forced persistence failure leaves no partial canonical/projection state.
+10. Unit, integration, architecture/invariant and browser E2E tests pass.
+11. Foundation regression checks continue to pass.
+12. Only synthetic non-sensitive test data is used.
+13. No out-of-scope infrastructure or AI capability is introduced.
+14. Evidence, review, CI and the Slice 01 gate are complete before merge.
 
 ## Delivery and gate rule
 
@@ -402,4 +440,4 @@ The branch must not be merged merely because CI is green. Completion and integra
 
 ## Implementation planning handoff
 
-After this written specification is reviewed and approved, create a detailed implementation plan before writing code. The plan must decompose work into small verifiable steps, define the precise lexical query algorithm, schema/migration changes, API/domain boundaries, test-first sequence, E2E evidence, and review/CI checkpoints.
+After this written specification is reviewed and approved, create a detailed implementation plan before writing code. The plan must decompose work into small verifiable steps, schema/migration changes, API/domain boundaries, test-first sequence, E2E evidence, and review/CI checkpoints. It must implement the lexical rule defined in this specification rather than replace it with a different retrieval mechanism.
