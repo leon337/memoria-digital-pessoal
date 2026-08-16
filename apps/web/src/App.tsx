@@ -23,6 +23,10 @@ export function App({ apiBaseUrl }: { apiBaseUrl: string }) {
       <header className="app-header">
         <h1>Memória Digital Pessoal</h1>
         <p>Guarde uma lembrança e encontre depois as palavras que foram registradas.</p>
+        <aside className="lab-warning" aria-label="Ambiente de laboratório">
+          <strong>Ambiente de laboratório.</strong> Use somente dados sintéticos. Não registre dados
+          pessoais ou lembranças reais nesta versão.
+        </aside>
         <p role="status" aria-live="polite" className="api-status">
           {text}
         </p>

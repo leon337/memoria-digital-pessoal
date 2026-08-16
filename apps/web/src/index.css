@@ -89,6 +89,14 @@ label {
   line-height: 1.1;
 }
 
+.lab-warning {
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border: 2px solid currentColor;
+  border-radius: 0.75rem;
+  font-size: 0.95rem;
+}
+
 .api-status,
 .feedback {
   font-weight: 700;

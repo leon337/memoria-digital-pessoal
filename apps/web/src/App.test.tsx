@@ -17,4 +17,15 @@ describe('App', () => {
       screen.getByRole('heading', { name: 'Consultar minhas lembranças' }),
     ).toBeInTheDocument();
   });
+
+  it('makes the synthetic-only laboratory boundary explicit', () => {
+    render(<App apiBaseUrl="http://127.0.0.1:3000" />);
+
+    expect(screen.getByLabelText('Ambiente de laboratório')).toHaveTextContent(
+      'Use somente dados sintéticos',
+    );
+    expect(screen.getByLabelText('Ambiente de laboratório')).toHaveTextContent(
+      'Não registre dados pessoais ou lembranças reais nesta versão.',
+    );
+  });
 });
