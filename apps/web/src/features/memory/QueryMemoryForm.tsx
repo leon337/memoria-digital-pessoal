@@ -44,25 +44,22 @@ export function QueryMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; e
           aria-describedby="memory-query-help"
         />
         <p id="memory-query-help" className="field-hint">
-          A busca desta versão procura palavras ou frases exatamente registradas.
+          A busca desta etapa procura palavras ou frases exatamente dentro das lembranças guardadas.
         </p>
         <button type="submit" disabled={!enabled || loading}>
-          {loading ? 'Consultando…' : 'Consultar lembranças'}
+          {loading ? 'Consultando…' : 'Consultar'}
         </button>
       </form>
 
       {result?.status === 'FOUND' ? (
         <div role="status" aria-live="polite" className="query-result">
           <p className="recorded-memory">{result.answer}</p>
-          <p className="provenance">
-            Fonte registrada · memória {result.provenance.memoryId} · evidência{' '}
-            {result.provenance.evidenceId}
-          </p>
+          <p className="provenance">Fonte: lembrança guardada</p>
         </div>
       ) : null}
       {result?.status === 'UNKNOWN' ? (
         <p role="status" aria-live="polite" className="feedback">
-          Não encontrei uma lembrança com essas palavras.
+          Não encontrei uma lembrança registrada que corresponda a essa busca.
         </p>
       ) : null}
       {error ? (

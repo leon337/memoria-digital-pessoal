@@ -24,9 +24,9 @@ describe('StoreMemoryForm', () => {
     });
     render(<StoreMemoryForm apiBaseUrl="http://api" enabled />);
 
-    const input = screen.getByLabelText('O que você quer guardar?');
+    const input = screen.getByLabelText('Lembrança');
     await user.type(input, '  Minha irmã se chama Ana.  ');
-    await user.click(screen.getByRole('button', { name: 'Guardar lembrança' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(createMemoryMock).toHaveBeenCalledTimes(1);
     expect(createMemoryMock).toHaveBeenCalledWith('http://api', '  Minha irmã se chama Ana.  ');
@@ -39,8 +39,8 @@ describe('StoreMemoryForm', () => {
     createMemoryMock.mockRejectedValue(new Error('unavailable'));
     render(<StoreMemoryForm apiBaseUrl="http://api" enabled />);
 
-    await user.type(screen.getByLabelText('O que você quer guardar?'), 'Registro sintético.');
-    await user.click(screen.getByRole('button', { name: 'Guardar lembrança' }));
+    await user.type(screen.getByLabelText('Lembrança'), 'Registro sintético.');
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível guardar');
     expect(screen.queryByText('Lembrança guardada.')).not.toBeInTheDocument();
@@ -48,7 +48,7 @@ describe('StoreMemoryForm', () => {
 
   it('is disabled while the API is unavailable', () => {
     render(<StoreMemoryForm apiBaseUrl="http://api" enabled={false} />);
-    expect(screen.getByLabelText('O que você quer guardar?')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Guardar lembrança' })).toBeDisabled();
+    expect(screen.getByLabelText('Lembrança')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
   });
 });

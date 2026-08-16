@@ -36,7 +36,7 @@ export function StoreMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; e
     <section className="memory-card" aria-labelledby="store-memory-title">
       <h2 id="store-memory-title">Guardar uma lembrança</h2>
       <form onSubmit={(event) => void submit(event)}>
-        <label htmlFor="memory-text">O que você quer guardar?</label>
+        <label htmlFor="memory-text">Lembrança</label>
         <textarea
           id="memory-text"
           name="memoryText"
@@ -48,7 +48,7 @@ export function StoreMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; e
         />
         <p className="field-hint">Até {MEMORY_TEXT_MAX_LENGTH} caracteres.</p>
         <button type="submit" disabled={!enabled || saving}>
-          {saving ? 'Guardando…' : 'Guardar lembrança'}
+          {saving ? 'Guardando…' : 'Guardar'}
         </button>
       </form>
       {message?.kind === 'success' ? (
