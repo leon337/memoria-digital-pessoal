@@ -44,6 +44,12 @@ importers:
 
   apps/api:
     dependencies:
+      '@mdp/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@mdp/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@mdp/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -102,6 +108,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@mdp/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       react:
         specifier: latest
         version: 19.2.8
@@ -137,7 +146,11 @@ importers:
         specifier: latest
         version: 8.2.1(@types/node@26.2.0)(jiti@2.7.0)(terser@5.50.0)
 
-  packages/contracts: {}
+  packages/contracts:
+    dependencies:
+      zod:
+        specifier: latest
+        version: 4.4.3
 
   packages/domain: {}
 
