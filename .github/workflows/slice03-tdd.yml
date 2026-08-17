@@ -1,0 +1,22 @@
+name: Slice03 TDD
+
+on:
+  push:
+    branches:
+      - slice/03-local-offline
+
+jobs:
+  web-tdd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:packages
+      - run: pnpm --filter @mdp/web typecheck
+      - run: pnpm exec prettier apps/web/src tests/architecture --check
+      - run: pnpm --filter @mdp/web test
