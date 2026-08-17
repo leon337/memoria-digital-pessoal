@@ -34,18 +34,32 @@ jobs:
       - run: pnpm prisma:validate
       - run: pnpm prisma:generate
       - run: pnpm db:migrate
-      - name: Assert exact Slice 01 product tables
+      - name: Assert exact Slice 02 product tables
         run: |
           actual="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT COALESCE(string_agg(tablename, ',' ORDER BY tablename), '') FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations';")"
           expected="current_facts,evidence,facts,ledger_events,memories"
           printf 'actual=%s\nexpected=%s\n' "$actual" "$expected"
           test "$actual" = "$expected"
+      - name: Assert Slice 02 correction schema
+        run: |
+          fact_lineage_column="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='facts' AND column_name='supersedes_fact_id' AND data_type='uuid';")"
+          fact_lineage_unique="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND tablename='facts' AND indexname='facts_supersedes_fact_id_key' AND indexdef ILIKE 'CREATE UNIQUE INDEX%';")"
+          ledger_columns="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='ledger_events' AND ((column_name IN ('fact_id','supersedes_fact_id') AND data_type='uuid') OR (column_name='reason' AND data_type='character varying' AND character_maximum_length=500));")"
+          correction_check="$(docker compose exec -T postgres psql -U mdp -d mdp -tAc "SELECT count(*) FROM pg_constraint WHERE conname='ledger_events_memory_corrected_fact_links_check' AND conrelid='ledger_events'::regclass;")"
+          printf 'fact_lineage_column=%s fact_lineage_unique=%s ledger_columns=%s correction_check=%s\n' "$fact_lineage_column" "$fact_lineage_unique" "$ledger_columns" "$correction_check"
+          test "$fact_lineage_column" = "1"
+          test "$fact_lineage_unique" = "1"
+          test "$ledger_columns" = "3"
+          test "$correction_check" = "1"
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
       - name: Verify Slice 01 PRF manifest
         working-directory: artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY
         run: sha256sum -c PHASE-01-ARTIFACT-MANIFEST.sha256
+      - name: Verify Slice 02 PRF manifest
+        working-directory: artifacts/phases/SLICE-02-CORRECTION-HISTORY
+        run: sha256sum -c PHASE-02-ARTIFACT-MANIFEST.sha256
       - run: pnpm test
       - run: pnpm build
       - name: Verify workspace runtime import
@@ -65,10 +79,12 @@ jobs:
 
           live_healthy="$(curl -sS -o /tmp/live-healthy.json -w '%{http_code}' http://127.0.0.1:3000/health/live)"
           ready_healthy="$(curl -sS -o /tmp/ready-healthy.json -w '%{http_code}' http://127.0.0.1:3000/health/ready)"
+          node scripts/verify-slice02-correction-outage.mjs prepare
           docker compose stop postgres
           live_db_down="$(curl -sS -o /tmp/live-db-down.json -w '%{http_code}' http://127.0.0.1:3000/health/live)"
           ready_db_down="$(curl -sS -o /tmp/ready-db-down.json -w '%{http_code}' http://127.0.0.1:3000/health/ready)"
           memory_db_down="$(curl --max-time 15 -sS -o /tmp/memory-db-down.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{"text":"Registro sintético de indisponibilidade."}' http://127.0.0.1:3000/memories)"
+          node scripts/verify-slice02-correction-outage.mjs verify
           docker compose start postgres
 
           printf 'healthy live=%s ready=%s\n' "$live_healthy" "$ready_healthy"

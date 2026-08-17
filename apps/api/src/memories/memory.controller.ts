@@ -1,4 +1,8 @@
-import { createMemoryRequestSchema, memoryQuerySchema } from '@mdp/contracts';
+import {
+  correctMemoryRequestSchema,
+  createMemoryRequestSchema,
+  memoryQuerySchema,
+} from '@mdp/contracts';
 import { isUuidV7 } from '@mdp/shared';
 import {
   BadRequestException,
@@ -13,6 +17,12 @@ import {
   Query,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { CodedHttpException } from '../common/http/api-error.js';
+import {
+  MemoryNotFoundError,
+  NoChangeCorrectionError,
+  StaleCorrectionError,
+} from './memory.errors.js';
 import { MEMORY_SERVICE, MemoryService } from './memory.service.js';
 import { MemoryStoreUnavailableError } from './memory.store.js';
 
@@ -42,6 +52,51 @@ export class MemoryController {
       throw new NotFoundException();
     }
     return memory;
+  }
+
+  @Post('memories/:id/corrections')
+  @HttpCode(201)
+  async correct(@Param('id') id: string, @Body() body: unknown) {
+    if (!isUuidV7(id)) {
+      throw new BadRequestException();
+    }
+
+    const parsed = correctMemoryRequestSchema.safeParse(body);
+    if (!parsed.success || !isUuidV7(parsed.data.expectedCurrentFactId)) {
+      throw new CodedHttpException('VALIDATION_FAILED', 422, 'Os dados enviados são inválidos.');
+    }
+
+    try {
+      return await this.mapAvailability(() => this.service.correct(id, parsed.data));
+    } catch (error) {
+      if (error instanceof MemoryNotFoundError) {
+        throw new NotFoundException();
+      }
+      if (error instanceof StaleCorrectionError) {
+        throw new CodedHttpException(
+          'STALE_CORRECTION',
+          409,
+          'A lembrança mudou desde a última consulta.',
+        );
+      }
+      if (error instanceof NoChangeCorrectionError) {
+        throw new CodedHttpException('NO_CHANGE', 422, 'A correção não altera o texto atual.');
+      }
+      throw error;
+    }
+  }
+
+  @Get('memories/:id/history')
+  async history(@Param('id') id: string) {
+    if (!isUuidV7(id)) {
+      throw new BadRequestException();
+    }
+
+    const history = await this.mapAvailability(() => this.service.history(id));
+    if (!history) {
+      throw new NotFoundException();
+    }
+    return history;
   }
 
   @Get('query')

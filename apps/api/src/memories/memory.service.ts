@@ -1,5 +1,17 @@
-import type { CreateMemoryResponse, GetMemoryResponse, MemoryQueryResponse } from '@mdp/contracts';
-import { createTextMemoryRecord } from '@mdp/domain';
+import type {
+  CorrectMemoryRequest,
+  CorrectMemoryResponse,
+  CreateMemoryResponse,
+  GetMemoryResponse,
+  MemoryHistoryResponse,
+  MemoryQueryResponse,
+} from '@mdp/contracts';
+import { CorrectionDomainError, createTextMemoryRecord } from '@mdp/domain';
+import {
+  MemoryNotFoundError,
+  NoChangeCorrectionError,
+  StaleCorrectionError,
+} from './memory.errors.js';
 import type { MemoryStore } from './memory.store.js';
 
 export const MEMORY_SERVICE = Symbol('MEMORY_SERVICE');
@@ -93,6 +105,78 @@ export class MemoryService {
         evidenceId: hit.evidenceId,
         factId: hit.factId,
       },
+    };
+  }
+
+  async correct(memoryId: string, request: CorrectMemoryRequest): Promise<CorrectMemoryResponse> {
+    const correctedAt = this.now();
+    const ids = {
+      evidenceId: this.createId(),
+      eventId: this.createId(),
+      factId: this.createId(),
+    };
+
+    let result;
+    try {
+      result = await this.store.correct({
+        memoryId,
+        expectedCurrentFactId: request.expectedCurrentFactId,
+        text: request.text,
+        ...(request.reason === undefined ? {} : { reason: request.reason }),
+        correctedAt,
+        ids,
+      });
+    } catch (error) {
+      if (error instanceof CorrectionDomainError && error.code === 'NO_CHANGE') {
+        throw new NoChangeCorrectionError();
+      }
+      throw error;
+    }
+
+    if (result.status === 'NOT_FOUND') {
+      throw new MemoryNotFoundError();
+    }
+    if (result.status === 'STALE') {
+      throw new StaleCorrectionError(result.currentFactId);
+    }
+
+    const record = result.record;
+    return {
+      memoryId,
+      current: {
+        factId: record.currentFact.factId,
+        evidenceId: record.currentFact.evidenceId,
+        content: record.currentFact.content,
+        recordedAt: record.currentFact.recordedAt.toISOString(),
+        correctedAt: record.fact.createdAt.toISOString(),
+      },
+      correction: {
+        eventId: record.event.id,
+        supersedesFactId: record.event.supersedesFactId,
+        reason: record.event.reason,
+      },
+    };
+  }
+
+  async history(memoryId: string): Promise<MemoryHistoryResponse | null> {
+    const stored = await this.store.history(memoryId);
+    if (!stored) {
+      return null;
+    }
+
+    return {
+      memoryId: stored.memoryId,
+      versions: stored.versions.map((version) => ({
+        factId: version.factId,
+        evidenceId: version.evidenceId,
+        content: version.content,
+        createdAt: version.createdAt.toISOString(),
+        reason: version.reason,
+        isOriginal: version.isOriginal,
+        isCurrent: version.isCurrent,
+        supersedesFactId: version.supersedesFactId,
+        eventId: version.eventId,
+      })),
     };
   }
 }

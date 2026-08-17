@@ -1,0 +1,67 @@
+SLICE 02 — Full Validation Evidence Snapshot
+
+Canonical pre-gate branch HEAD:
+361214e97e9b70df7092ee1f6d5c3944446edda0
+
+Canonical CI:
+run 32000681041
+job 95300284264
+conclusion SUCCESS
+
+Database/migration:
+- 3 migrations deployed, including 20260817000100_slice_02_correction_history
+- exact public product table allowlist:
+  current_facts,evidence,facts,ledger_events,memories
+- correction catalog assertion:
+  fact_lineage_column=1
+  fact_lineage_unique=1
+  ledger_columns=3
+  correction_check=1
+
+Static/quality:
+- pnpm typecheck: PASS
+- pnpm lint: PASS
+- pnpm format:check: PASS
+- Slice 01 PRF manifest regression: PASS
+
+Automated test result:
+- Test Files: 25 passed (25)
+- Tests: 95 passed (95)
+- Included domain correction tests, contracts, HTTP, web, architecture and real PostgreSQL integration.
+
+Browser E2E:
+- Running 3 tests using 1 worker
+- 3 passed
+- Slice 02 scenario proves synthetic store/query/correct/current-only/history/restore chain.
+
+Outage:
+- synthetic correction fixture prepared while PostgreSQL healthy
+- PostgreSQL stopped
+- live=200
+- ready=503
+- memory creation=503
+- correction=503 SERVICE_UNAVAILABLE safe-envelope
+- submitted correction text not leaked
+- SQL details not leaked
+
+Review remediation proof:
+- RED commit 1218f03805cca35b3e447d123b18869adbbd3282
+- RED CI 32000553631 / job 95299911316
+- 94 pre-existing tests passed; new feedback regression failed
+- GREEN fix 361214e97e9b70df7092ee1f6d5c3944446edda0
+- GREEN CI 32000681041 / job 95300284264
+- 95/95 tests and 3/3 E2E passed
+
+Known CI maintenance note:
+- GitHub Actions warns checkout@v4/setup-node@v4 target deprecated Node 20 action runtime; runner executes them under Node 24.
+- Repository engine remains Node >=24 <25.
+
+Governance at snapshot:
+- PR #4 OPEN / NOT MERGED
+- independent Emily audit NOT PERFORMED / NOT CLAIMED
+- LÉO internal gate NOT PERFORMED / NOT CLAIMED
+- HUMAN_GATE PENDING, authority LEANDRO
+- merge authorization NOT GRANTED
+- real sensitive data NOT AUTHORIZED
+- pilot NOT AUTHORIZED
+- Slice 03 NOT AUTHORIZED

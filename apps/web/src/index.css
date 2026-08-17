@@ -142,8 +142,77 @@ label {
   font-weight: 650;
 }
 
+.memory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.memory-actions button,
+.history-version button {
+  width: auto;
+  flex: 1 1 10rem;
+}
+
+.correction-form {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #c9d1d9;
+  border-radius: 0.75rem;
+  background: #f5f7f9;
+}
+
+.memory-history {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #c9d1d9;
+}
+
+.memory-history h3 {
+  margin: 0 0 0.75rem;
+}
+
+.history-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-version {
+  padding: 1rem;
+  border: 1px solid #c9d1d9;
+  border-radius: 0.75rem;
+  background: #f5f7f9;
+  overflow-wrap: anywhere;
+}
+
+.history-version p {
+  margin-bottom: 0.75rem;
+}
+
+.history-version-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.history-version-heading time {
+  color: #465465;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
 @media (min-width: 48rem) {
   .memory-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .memory-actions button,
+  .history-version button {
+    flex: 0 1 auto;
   }
 }

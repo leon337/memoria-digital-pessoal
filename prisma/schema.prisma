@@ -38,28 +38,40 @@ model Evidence {
 }
 
 model LedgerEvent {
-  id         String   @id @db.Uuid
-  memoryId   String   @map("memory_id") @db.Uuid
-  evidenceId String   @map("evidence_id") @db.Uuid
-  type       String   @db.VarChar(64)
-  createdAt  DateTime @map("created_at") @db.Timestamptz(3)
-  memory     Memory   @relation(fields: [memoryId], references: [id], onDelete: Restrict)
-  evidence   Evidence @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
+  id               String   @id @db.Uuid
+  memoryId         String   @map("memory_id") @db.Uuid
+  evidenceId       String   @map("evidence_id") @db.Uuid
+  factId           String?  @map("fact_id") @db.Uuid
+  supersedesFactId String?  @map("supersedes_fact_id") @db.Uuid
+  type             String   @db.VarChar(64)
+  reason           String?  @db.VarChar(500)
+  createdAt        DateTime @map("created_at") @db.Timestamptz(3)
+  memory           Memory   @relation(fields: [memoryId], references: [id], onDelete: Restrict)
+  evidence         Evidence @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
+  fact             Fact?    @relation("CorrectionNewFact", fields: [factId], references: [id], onDelete: Restrict)
+  supersedesFact   Fact?    @relation("CorrectionPreviousFact", fields: [supersedesFactId], references: [id], onDelete: Restrict)
 
   @@index([memoryId])
+  @@index([factId])
+  @@index([supersedesFactId])
   @@map("ledger_events")
 }
 
 model Fact {
-  id         String       @id @db.Uuid
-  memoryId   String       @map("memory_id") @db.Uuid
-  evidenceId String       @map("evidence_id") @db.Uuid
-  kind       String       @db.VarChar(64)
-  content    String       @db.VarChar(4000)
-  createdAt  DateTime     @map("created_at") @db.Timestamptz(3)
-  memory     Memory       @relation(fields: [memoryId], references: [id], onDelete: Restrict)
-  evidence   Evidence     @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
-  current    CurrentFact?
+  id               String        @id @db.Uuid
+  memoryId         String        @map("memory_id") @db.Uuid
+  evidenceId       String        @map("evidence_id") @db.Uuid
+  kind             String        @db.VarChar(64)
+  content          String        @db.VarChar(4000)
+  supersedesFactId String?       @unique @map("supersedes_fact_id") @db.Uuid
+  createdAt        DateTime      @map("created_at") @db.Timestamptz(3)
+  memory           Memory        @relation(fields: [memoryId], references: [id], onDelete: Restrict)
+  evidence         Evidence      @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
+  supersedes       Fact?         @relation("FactSupersession", fields: [supersedesFactId], references: [id], onDelete: Restrict)
+  successor        Fact?         @relation("FactSupersession")
+  newFactEvents    LedgerEvent[] @relation("CorrectionNewFact")
+  supersededEvents LedgerEvent[] @relation("CorrectionPreviousFact")
+  current          CurrentFact?
 
   @@index([memoryId])
   @@map("facts")

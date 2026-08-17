@@ -7,6 +7,8 @@ function makeStore(overrides: Partial<MemoryStore> = {}): MemoryStore {
     create: async () => undefined,
     getById: async () => null,
     findLiteral: async () => null,
+    correct: async () => ({ status: 'NOT_FOUND' }),
+    history: async () => null,
     ...overrides,
   };
 }

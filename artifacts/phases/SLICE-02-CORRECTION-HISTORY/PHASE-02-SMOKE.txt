@@ -1,0 +1,32 @@
+SLICE 02 — Smoke / End-to-End Proof
+Date: 2026-08-17
+CI: 32000681041 / job 95300284264
+
+Browser suite:
+3/3 PASS
+
+Slice 02 synthetic browser path:
+1. Laboratory warning visible: synthetic data only.
+2. Store synthetic memory: "Minha irmã sintética se chama Ana."
+3. Query "Ana" => FOUND current text.
+4. Open Corrigir inline.
+5. Correct to "Minha irmã sintética se chama Beatriz."
+6. Successful current state is published.
+7. Query "Ana" => UNKNOWN.
+8. Query "Beatriz" => FOUND.
+9. Open history => 2 versions, original first and corrected current second.
+10. Select original with "Usar este texto como nova correção".
+11. Save => current returns to Ana via a NEW correction.
+12. Reopen history => 3 versions, final appended Ana version marked Atual.
+
+Outage smoke:
+- API live healthy: 200
+- API ready healthy: 200
+- PostgreSQL stopped
+- live remains 200
+- ready becomes 503
+- memory creation returns 503 safe envelope
+- correction returns 503 SERVICE_UNAVAILABLE safe envelope
+- submitted correction text and SQL details are not present in error response
+
+No real personal data was used.
