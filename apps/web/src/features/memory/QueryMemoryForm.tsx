@@ -1,6 +1,7 @@
 import { MEMORY_QUERY_MAX_LENGTH, type MemoryQueryResponse } from '@mdp/contracts';
 import { useState, type FormEvent } from 'react';
 import { queryMemory } from '../../lib/memory-api.js';
+import { MemoryFoundResult } from './MemoryFoundResult.js';
 
 export function QueryMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; enabled: boolean }) {
   const [query, setQuery] = useState('');
@@ -52,10 +53,7 @@ export function QueryMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; e
       </form>
 
       {result?.status === 'FOUND' ? (
-        <div role="status" aria-live="polite" className="query-result">
-          <p className="recorded-memory">{result.answer}</p>
-          <p className="provenance">Fonte: lembrança guardada</p>
-        </div>
+        <MemoryFoundResult apiBaseUrl={apiBaseUrl} result={result} onCurrentChange={setResult} />
       ) : null}
       {result?.status === 'UNKNOWN' ? (
         <p role="status" aria-live="polite" className="feedback">
