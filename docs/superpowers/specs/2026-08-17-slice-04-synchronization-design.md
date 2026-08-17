@@ -341,7 +341,15 @@ Stable per-event outcomes include:
 - `BLOCKED`;
 - `INVALID` / integrity-specific errors.
 
-A conflict result may mean the event was durably preserved but opened/extended a conflict; it is not equivalent to data loss.
+The acknowledgement semantics are explicit:
+
+- `APPLIED` = durably accepted by the server; the matching local outbound event is acknowledged and no longer retried as pending;
+- `ALREADY_APPLIED` = the same immutable event was previously durably accepted; the matching local outbound event is acknowledged and no longer retried as pending;
+- `CONFLICT` = the event itself was durably accepted and distributed, but it opened or extended an unresolved causal conflict; the matching local outbound event is acknowledged and is not retried as pending, while the memory remains in conflict state;
+- `DEPENDENCY_MISSING` = not accepted; retain pending, recover the dependency, and retry with the same `eventId`;
+- `BLOCKED`, `INVALID`, and integrity violations = not accepted; preserve the pending record/evidence but do not retry indefinitely without corrective action.
+
+Therefore `CONFLICT` is not data loss and is not a transport failure. It is an accepted remote event plus an unresolved domain state.
 
 ### 11.4 Pull
 
@@ -438,7 +446,7 @@ No fixed semantic retention period is embedded in the domain contract.
 
 ## 16. Local IndexedDB evolution
 
-Slice 04 evolves the local database non-destructively. The shipping version number is determined in the implementation plan, but the migration must add dedicated structures equivalent to:
+Slice 04 evolves `mdp-local` non-destructively from **version 2 to version 3**, as approved in the design dialogue. Version 3 adds dedicated structures equivalent to:
 
 ```text
 existing product stores
@@ -467,7 +475,7 @@ These stores remain separated by responsibility:
 - `syncConflicts` = reconstructible conflict projection;
 - staging = incomplete bootstrap isolation.
 
-The migration must preserve existing data and UUIDs and remain writable after upgrade. If migration cannot preserve integrity, it must fail rather than silently drop records.
+The v2 → v3 migration must preserve existing data and UUIDs and remain writable after upgrade. If migration cannot preserve integrity, it must fail rather than silently drop records.
 
 ## 17. Local write atomicity
 
@@ -506,7 +514,7 @@ Useful triggers include:
 - pending work detection;
 - explicit `Synchronize now` user action.
 
-Transient failures such as network errors, timeouts, and retryable 5xx responses enter retry wait. Permanent/integrity/protocol/conflict states do not loop indefinitely.
+Transient failures such as network errors, timeouts, and retryable 5xx responses enter retry wait. Permanent/integrity/protocol/conflict states do not loop indefinitely. An accepted `CONFLICT` result acknowledges the outbound event and leaves only the conflict-resolution workflow pending.
 
 Reload or application close never removes pending work.
 
@@ -600,7 +608,7 @@ The implementation plan must define stable synchronization error/result codes co
 - cursor expired;
 - bootstrap expired;
 - dependency missing;
-- conflict;
+- conflict (durably accepted event + unresolved domain conflict);
 - integrity violation;
 - transient service unavailability;
 - blocked/permanent pending work.
@@ -645,7 +653,7 @@ Must exercise stable outcomes including:
 
 - `APPLIED`;
 - `ALREADY_APPLIED`;
-- `CONFLICT`;
+- `CONFLICT` with durable-accept acknowledgement semantics;
 - `DEPENDENCY_MISSING`;
 - `CURSOR_EXPIRED`;
 - protocol unsupported;
@@ -696,7 +704,7 @@ Slice 04 is technically ready for a merge gate only after all of the following a
 
 ### Architecture and migration
 
-- non-destructive IndexedDB migration from the Slice 03 schema;
+- non-destructive IndexedDB v2 → v3 migration from the Slice 03 schema;
 - causal N:N Fact relation support;
 - persistent local synchronization metadata;
 - server Transactional Outbox atomic with canonical write;
@@ -778,7 +786,7 @@ The dialogue approved the following decisions, all with Option A:
 19. explicit protocol versioning;
 20. consistent bootstrap snapshot + high-watermark cursor in one logical boundary;
 21. explicit N:N causal Fact graph;
-22. dedicated IndexedDB stores by responsibility;
+22. dedicated IndexedDB v3 stores by responsibility;
 23. immutable self-contained server Outbox envelopes;
 24. `DEPENDENCY_MISSING` + dependency recovery + retry;
 25. global + per-memory synchronization status;
