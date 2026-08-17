@@ -1,3 +1,18 @@
+export { apiErrorCodeSchema, apiErrorEnvelopeSchema } from './api-error.js';
+export type { ApiErrorCode, ApiErrorEnvelope } from './api-error.js';
+export {
+  CORRECTION_REASON_MAX_LENGTH,
+  correctMemoryRequestSchema,
+  correctMemoryResponseSchema,
+  memoryHistoryResponseSchema,
+  memoryHistoryVersionSchema,
+} from './correction.js';
+export type {
+  CorrectMemoryRequest,
+  CorrectMemoryResponse,
+  MemoryHistoryResponse,
+  MemoryHistoryVersion,
+} from './correction.js';
 export {
   MEMORY_QUERY_MAX_LENGTH,
   MEMORY_TEXT_MAX_LENGTH,
