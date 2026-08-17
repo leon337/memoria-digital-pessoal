@@ -62,11 +62,20 @@ for (const forbidden of [
   'BackgroundSyncPlugin',
   'workbox-background-sync',
 ]) {
-  assert(!javascript.includes(forbidden), `forbidden Service Worker/API cache marker: ${forbidden}`);
+  assert(
+    !javascript.includes(forbidden),
+    `forbidden Service Worker/API cache marker: ${forbidden}`,
+  );
 }
 
 const serviceWorker = readFileSync(join(dist, 'sw.js'), 'utf8');
-assert(serviceWorker.includes('index.html'), 'Service Worker must precache/navigation-fallback index.html');
-assert(serviceWorker.includes('SKIP_WAITING'), 'prompt update worker must support explicit SKIP_WAITING message');
+assert(
+  serviceWorker.includes('index.html'),
+  'Service Worker must precache/navigation-fallback index.html',
+);
+assert(
+  serviceWorker.includes('SKIP_WAITING'),
+  'prompt update worker must support explicit SKIP_WAITING message',
+);
 
 console.log('Slice03 PWA build verification passed.');
