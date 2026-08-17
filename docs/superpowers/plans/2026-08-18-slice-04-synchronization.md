@@ -4,159 +4,119 @@
 
 **Goal:** Deliver reliable bidirectional synchronization between the Slice 03 local IndexedDB repository and the PostgreSQL server, with immutable event transport, transactional Outbox, idempotent retry, causal conflict preservation, fixed-snapshot bootstrap, and deterministic convergence.
 
-**Architecture:** Keep the PWA local-first: local domain writes commit to IndexedDB together with a persistent local outbound event, then a dedicated `SyncEngine` performs versioned `bootstrap → push → pull` over HTTP. PostgreSQL is the durable convergence coordinator; every server-accepted canonical mutation, including legacy `/memories` writes, commits canonical rows, causal `FactRelation` rows, projection updates, a commit-ordered feed cursor, and one immutable `SyncOutbox` envelope in the same transaction. Canonical truth remains Evidence + LedgerEvent + Fact + FactRelation; `CurrentFact`, conflict state, cursors, and sync status are reconstructible projections.
+**Architecture:** Keep the PWA local-first: local domain writes commit to IndexedDB together with a persistent outbound event, then a dedicated `SyncEngine` performs versioned `bootstrap → push → pull` over HTTP. PostgreSQL is the durable convergence coordinator; every server-accepted canonical mutation, including existing `/memories` writes, commits canonical rows, causal `FactRelation` rows, projection updates, a commit-ordered feed cursor, and one immutable `SyncOutbox` envelope in the same transaction. Canonical truth remains Evidence + LedgerEvent + Fact + FactRelation; `CurrentFact`, open-conflict state, cursors, and sync status are reconstructible projections.
 
 **Tech Stack:** TypeScript 6, React, Vite PWA, IndexedDB, NestJS, PostgreSQL, Prisma, Zod, Vitest, Playwright, pnpm 10, Node.js 24.
 
+**Approved design:** `docs/superpowers/specs/2026-08-17-slice-04-synchronization-design.md`, design HEAD `4608498ce05a5fe44d1bb1d49f3a308996f575e7`. LEANDRO approved the written specification through `HUMAN_SPEC_REVIEW_GATE` on 2026-08-18. That approval authorized this implementation plan, not implementation itself.
+
 ## Global Constraints
 
-- Written design source of truth: `docs/superpowers/specs/2026-08-17-slice-04-synchronization-design.md` at design HEAD `4608498ce05a5fe44d1bb1d49f3a308996f575e7`.
-- Implementation must start only after a separate explicit HUMAN_GATE; this plan itself does not authorize implementation or merge.
-- Real sensitive data: **NOT AUTHORIZED**. All implementation, fixtures, tests, E2E, and evidence use synthetic/controlled data only.
+- Implementation must start only after a separate explicit HUMAN_GATE; this plan does not authorize implementation or merge.
+- Real sensitive data: **NOT AUTHORIZED**. Fixtures, tests, E2E, logs, evidence, and demos use synthetic/controlled data only.
 - Pilot: **NOT AUTHORIZED**.
-- Protocol version is exactly `1` for Slice 04; persisted envelopes carry `protocolVersion: 1`.
-- `mdp-local` migration is exactly **v2 → v3**, non-destructive, with UUIDs preserved.
-- Client-generated UUID v7 identifiers remain definitive; no server remapping.
-- Synchronization direction is bidirectional.
+- Protocol version is exactly `1` for Slice 04; every persisted/retried envelope carries `protocolVersion: 1`.
+- `mdp-local` migration is exactly **v2 → v3**, non-destructive, with all existing UUIDs preserved.
+- Client-generated UUID v7 identifiers remain definitive; there is no server remapping.
+- Synchronization is bidirectional.
 - Synchronization unit is immutable event + immutable dependencies.
-- Event types in scope: `MEMORY_CREATED`, `MEMORY_CORRECTED`, `CONFLICT_RESOLVED` only.
+- Event types in scope are exactly `MEMORY_CREATED`, `MEMORY_CORRECTED`, `CONFLICT_RESOLVED`.
 - Deletion, purge, remote wipe, and content tombstone semantics are out of scope.
-- `eventId` is the idempotency key; retry never creates a replacement ID.
-- `CONFLICT` means the event was durably accepted and acknowledged, while the memory remains unresolved; do not retry the accepted outbound event.
-- Push is atomic per event; pull is atomic per page; bootstrap promotion is atomic.
-- Server feed ordering is operational only. Timestamps, UUID order, and network arrival order never decide causal truth.
-- Server sequence must reflect transaction commit order. Do not use standalone `BIGSERIAL/MAX(sequence)` semantics that can expose a high-water mark beyond an uncommitted lower sequence.
+- `eventId` is the sole logical idempotency key; retry never creates a replacement ID.
+- `CONFLICT` means the outbound event was durably accepted and acknowledged while the memory remains unresolved; the accepted event is removed from pending retry.
+- Push is atomic per event. Pull is atomic per page. Bootstrap promotion is atomic.
+- Server feed ordering is operational only. Timestamp, UUID order, and network arrival order never decide causal truth.
+- Feed sequence must reflect serialized transactional acceptance order. Do not use standalone `BIGSERIAL` allocation or `MAX(sequence)` as the ordering primitive.
 - Every server canonical sync-visible write and corresponding Outbox record commit in one PostgreSQL transaction.
-- Redis, BullMQ, a separate worker, WebSocket, peer-to-peer sync, and mandatory Service Worker Background Sync are not introduced.
+- Redis, BullMQ, separate worker processes, WebSocket, peer-to-peer sync, and mandatory Service Worker Background Sync are not introduced.
 - `clientInstanceId` identifies an installation operationally; it is not authentication or authorization.
-- Foreground automatic sync + explicit `Synchronize now`; bounded exponential backoff + jitter for transient failures only.
-- Cursor advances only in the same local transaction that successfully applies the corresponding pull page/bootstrap promotion.
+- Foreground automatic sync + explicit `Synchronize now`; bounded exponential backoff + jitter applies only to transient failures.
+- Cursor advances only in the same local transaction that successfully applies the corresponding pull page or completed bootstrap promotion.
 - Outbox retention is operational/configurable and never deletes canonical memory history.
-- Slices 01–03 behavior and tests remain green.
+- Slices 01–03 behavior and tests remain green, including isolated offline PWA regression and PostgreSQL outage safety.
 
 ---
 
-## File Map
+## Exact Protocol Types
 
-### Shared contracts/domain
-
-- Create `packages/contracts/src/sync.ts` — protocol v1 schemas, DTOs, stable result/error codes, canonical record/envelope shapes.
-- Create `packages/contracts/src/sync.test.ts` — protocol parsing/version/result semantics.
-- Modify `packages/contracts/src/index.ts` — export sync contracts.
-- Modify `packages/contracts/src/memory.ts` and `memory.test.ts` — add conflict query response and graph-aware history fields without removing existing normal-flow fields.
-- Create `packages/domain/src/fact-graph.ts` and `fact-graph.test.ts` — DAG validation, topological history, leaf detection, dominator-based conflict baseline, current projection derivation.
-- Create `packages/domain/src/conflict-resolution.ts` and `conflict-resolution.test.ts` — append-only resolution record creation.
-- Modify `packages/domain/src/correction.ts` and tests — expose causal relation for a normal correction while retaining legacy compatibility fields.
-- Modify `packages/domain/src/index.ts` — export new domain APIs.
-
-### PostgreSQL / API
-
-- Modify `prisma/schema.prisma`.
-- Create `prisma/migrations/20260818000100_slice_04_synchronization/migration.sql`.
-- Create `apps/api/src/sync/sync.store.ts` — server sync persistence boundary.
-- Create `apps/api/src/sync/sync.service.ts`, `sync.service.test.ts` — protocol orchestration/validation.
-- Create `apps/api/src/sync/sync.controller.ts`, `sync.controller.test.ts` — HTTP endpoints.
-- Create `apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.ts` and integration tests — push/pull/bootstrap/retention implementation.
-- Create `apps/api/src/infrastructure/persistence/prisma/prisma-canonical-memory.writer.ts` and tests — common transactional canonical writer + commit-ordered feed allocation + Outbox envelope.
-- Modify `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.ts` and integration tests — existing server create/correct use the common writer and publish Outbox.
-- Modify `apps/api/src/app.module.ts` — register sync providers/controller.
-- Modify `apps/api/src/config/env.ts` and tests — operational sync limits/retention/bootstrap TTL.
-
-### Local IndexedDB / sync engine
-
-- Modify `apps/web/src/lib/indexeddb/mdp-local-db.ts` and tests — v3 stores/indexes/migration/backfill.
-- Modify `apps/web/src/lib/indexeddb/indexeddb-memory-repository.ts` and tests — atomic local Outbox, FactRelation writes, graph-aware query/history, conflict resolution.
-- Modify `apps/web/src/lib/memory-repository.ts` — conflict/resolve boundary.
-- Create `apps/web/src/lib/indexeddb/indexeddb-sync-store.ts` and tests — pending queue, pull apply, bootstrap staging/promotion, cursor/conflict/status state.
-- Create `apps/web/src/lib/sync/sync-api.ts` and tests — versioned HTTP client.
-- Create `apps/web/src/lib/sync/retry.ts` and tests — bounded exponential backoff/jitter/classification.
-- Create `apps/web/src/lib/sync/sync-engine.ts` and tests — single-flight bootstrap/push/pull convergence loop.
-- Create `apps/web/src/lib/sync/use-sync-state.ts` and tests — React subscription/trigger layer.
-
-### UI
-
-- Create `apps/web/src/features/sync/SyncStatus.tsx` and test.
-- Create `apps/web/src/features/sync/ConflictResolutionPanel.tsx` and test.
-- Modify `apps/web/src/App.tsx`, `App.test.tsx`.
-- Modify `apps/web/src/features/memory/StoreMemoryForm.tsx` and test — truthful local-save copy.
-- Modify `apps/web/src/features/memory/MemoryFoundResult.tsx` and test — conflict display/per-memory sync state/resolve action.
-
-### Verification / CI / evidence
-
-- Create `tests/architecture/slice-04-scope.test.ts`.
-- Create `tests/e2e/synchronization-core.spec.ts`.
-- Create `tests/e2e/synchronization-conflicts.spec.ts`.
-- Create `tests/e2e/synchronization-recovery.spec.ts`.
-- Modify `playwright.config.ts` — deterministic synthetic sync limits suitable for retention/recovery tests.
-- Keep `playwright.offline.config.ts` limited to Slice 03 offline regression.
-- Modify `.github/workflows/ci.yml` — Slice 04 physical schema guards and sync E2E coverage while preserving all previous checks.
-- Create `docs/evidence/slice-04/SLICE-04-EVIDENCE-001.md`, `docs/checkpoints/MDP-SLICE-04-CHECKPOINT-001.md`, `docs/phases/SLICE-04.md`, and `artifacts/phases/SLICE-04-SYNCHRONIZATION/*` only after the implementation/test evidence exists.
-
----
-
-### Task 1: Define protocol v1 contracts and stable synchronization semantics
-
-**Files:**
-- Create: `packages/contracts/src/sync.ts`
-- Create: `packages/contracts/src/sync.test.ts`
-- Modify: `packages/contracts/src/index.ts`
-
-**Interfaces:**
-- Produces: `SYNC_PROTOCOL_VERSION`, `syncEventEnvelopeSchema`, `syncPushRequestSchema`, `syncPushResponseSchema`, `syncPullResponseSchema`, `syncBootstrapStartResponseSchema`, `syncBootstrapPageResponseSchema`, `SyncEventEnvelope`, `SyncPushEventResult`, `SyncCursor`.
-- Cursor JSON type is a decimal string, not JavaScript `number`, because PostgreSQL `BIGINT` may exceed `Number.MAX_SAFE_INTEGER`.
-
-- [ ] **Step 1: Write failing protocol tests**
-
-Add tests that require version `1`, reject `2`, preserve decimal-string cursors, and distinguish accepted `CONFLICT` from retryable `DEPENDENCY_MISSING`:
-
-```ts
-expect(syncCursorSchema.parse('9007199254740993')).toBe('9007199254740993');
-expect(() => syncEventEnvelopeSchema.parse({ ...validEnvelope, protocolVersion: 2 })).toThrow();
-expect(syncPushEventResultSchema.parse({ eventId, status: 'CONFLICT' }).status).toBe('CONFLICT');
-expect(syncPushEventResultSchema.parse({
-  eventId,
-  status: 'DEPENDENCY_MISSING',
-  missingFactIds: [factId],
-}).status).toBe('DEPENDENCY_MISSING');
-```
-
-- [ ] **Step 2: Run the focused test and verify RED**
-
-Run: `pnpm exec vitest run packages/contracts/src/sync.test.ts`
-
-Expected: FAIL because sync contracts do not exist.
-
-- [ ] **Step 3: Implement the exact protocol surface**
-
-Define at minimum:
+Task 1 must create these logical shapes in `packages/contracts/src/sync.ts` using Zod schemas and exported inferred TypeScript types. ISO timestamps use the same contract conventions as existing memory contracts. UUID fields use the existing UUID validation style.
 
 ```ts
 export const SYNC_PROTOCOL_VERSION = 1 as const;
-export type SyncCursor = string;
+export type SyncCursor = string; // decimal BIGINT string
 export type SyncEventType = 'MEMORY_CREATED' | 'MEMORY_CORRECTED' | 'CONFLICT_RESOLVED';
-export type SyncPushStatus =
-  | 'APPLIED'
-  | 'ALREADY_APPLIED'
-  | 'CONFLICT'
-  | 'DEPENDENCY_MISSING'
-  | 'BLOCKED'
-  | 'INVALID';
+
+export interface SyncMemoryRecord {
+  kind: 'memory';
+  id: string;
+  recordedAt: string;
+  occurredAt: null;
+  temporalPrecision: 'unknown';
+}
+
+export interface SyncEvidenceRecord {
+  kind: 'evidence';
+  id: string;
+  memoryId: string;
+  evidenceKind: 'text';
+  content: string;
+  createdAt: string;
+}
+
+export interface SyncLedgerEventRecord {
+  kind: 'ledgerEvent';
+  id: string;
+  memoryId: string;
+  evidenceId: string;
+  factId: string | null;
+  supersedesFactId: string | null;
+  eventType: SyncEventType;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface SyncFactRecord {
+  kind: 'fact';
+  id: string;
+  memoryId: string;
+  evidenceId: string;
+  factKind: 'autobiographical_statement';
+  content: string;
+  createdAt: string;
+}
+
+export interface SyncFactRelationRecord {
+  kind: 'factRelation';
+  memoryId: string;
+  predecessorFactId: string;
+  successorFactId: string;
+  relationType: 'SUPERSEDES';
+}
+
+export type SyncCanonicalRecord =
+  | SyncMemoryRecord
+  | SyncEvidenceRecord
+  | SyncLedgerEventRecord
+  | SyncFactRecord
+  | SyncFactRelationRecord;
 
 export interface SyncEventEnvelope {
   protocolVersion: 1;
   eventId: string;
   eventType: SyncEventType;
   memoryId: string;
-  records: SyncCanonicalRecord[];
   predecessorFactIds: string[];
+  records: SyncCanonicalRecord[];
 }
-```
 
-Canonical record variants must explicitly cover `memory`, `evidence`, `ledgerEvent`, `fact`, and `factRelation`. Dates are ISO strings. `FactRelation` is the authoritative causal representation.
+export type SyncPushEventResult =
+  | { eventId: string; status: 'APPLIED' }
+  | { eventId: string; status: 'ALREADY_APPLIED' }
+  | { eventId: string; status: 'CONFLICT' }
+  | { eventId: string; status: 'DEPENDENCY_MISSING'; missingFactIds: string[] }
+  | { eventId: string; status: 'BLOCKED'; code: 'SYNC_BLOCKED' }
+  | { eventId: string; status: 'INVALID'; code: 'SYNC_INTEGRITY_VIOLATION' };
 
-Define stable top-level sync error codes:
-
-```ts
 export type SyncErrorCode =
   | 'SYNC_PROTOCOL_UNSUPPORTED'
   | 'SYNC_CURSOR_EXPIRED'
@@ -167,7 +127,186 @@ export type SyncErrorCode =
   | 'SYNC_BLOCKED';
 ```
 
-- [ ] **Step 4: Export the contracts and run tests**
+Every event envelope includes the Memory record, the event's Evidence, LedgerEvent, Fact, and zero or more FactRelation records. This controlled duplication makes each envelope self-contained and safe for immutable idempotent replay.
+
+---
+
+## Exact PostgreSQL Slice 04 Shape
+
+Task 4 must implement the following physical semantics. Prisma names may be idiomatic models, but table/column names below are the database contract and CI checks use them verbatim.
+
+```sql
+DROP INDEX IF EXISTS "facts_supersedes_fact_id_key";
+CREATE UNIQUE INDEX "facts_id_memory_id_key" ON "facts"("id", "memory_id");
+
+CREATE TABLE "fact_relations" (
+  "memory_id" UUID NOT NULL,
+  "predecessor_fact_id" UUID NOT NULL,
+  "successor_fact_id" UUID NOT NULL,
+  "relation_type" VARCHAR(32) NOT NULL,
+  CONSTRAINT "fact_relations_pkey" PRIMARY KEY ("predecessor_fact_id", "successor_fact_id"),
+  CONSTRAINT "fact_relations_no_self_edge_check" CHECK ("predecessor_fact_id" <> "successor_fact_id"),
+  CONSTRAINT "fact_relations_type_check" CHECK ("relation_type" = 'SUPERSEDES'),
+  CONSTRAINT "fact_relations_predecessor_fkey" FOREIGN KEY ("predecessor_fact_id", "memory_id") REFERENCES "facts"("id", "memory_id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "fact_relations_successor_fkey" FOREIGN KEY ("successor_fact_id", "memory_id") REFERENCES "facts"("id", "memory_id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "fact_relations_memory_fkey" FOREIGN KEY ("memory_id") REFERENCES "memories"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+CREATE INDEX "fact_relations_memory_id_idx" ON "fact_relations"("memory_id");
+CREATE INDEX "fact_relations_predecessor_idx" ON "fact_relations"("predecessor_fact_id");
+CREATE INDEX "fact_relations_successor_idx" ON "fact_relations"("successor_fact_id");
+
+INSERT INTO "fact_relations" ("memory_id", "predecessor_fact_id", "successor_fact_id", "relation_type")
+SELECT "memory_id", "supersedes_fact_id", "id", 'SUPERSEDES'
+FROM "facts"
+WHERE "supersedes_fact_id" IS NOT NULL;
+
+CREATE TABLE "sync_feed_state" (
+  "id" INTEGER NOT NULL,
+  "current_sequence" BIGINT NOT NULL,
+  CONSTRAINT "sync_feed_state_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "sync_feed_state_singleton_check" CHECK ("id" = 1),
+  CONSTRAINT "sync_feed_state_sequence_check" CHECK ("current_sequence" >= 0)
+);
+INSERT INTO "sync_feed_state" ("id", "current_sequence") VALUES (1, 0);
+
+CREATE TABLE "sync_outbox" (
+  "sequence" BIGINT NOT NULL,
+  "event_id" UUID NOT NULL,
+  "protocol_version" INTEGER NOT NULL,
+  "event_type" VARCHAR(64) NOT NULL,
+  "memory_id" UUID NOT NULL,
+  "origin_client_instance_id" UUID,
+  "payload" JSONB NOT NULL,
+  "payload_hash" CHAR(64) NOT NULL,
+  "created_at" TIMESTAMPTZ(3) NOT NULL,
+  CONSTRAINT "sync_outbox_pkey" PRIMARY KEY ("sequence"),
+  CONSTRAINT "sync_outbox_event_id_key" UNIQUE ("event_id"),
+  CONSTRAINT "sync_outbox_sequence_check" CHECK ("sequence" > 0),
+  CONSTRAINT "sync_outbox_protocol_check" CHECK ("protocol_version" > 0),
+  CONSTRAINT "sync_outbox_memory_fkey" FOREIGN KEY ("memory_id") REFERENCES "memories"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+CREATE INDEX "sync_outbox_memory_id_idx" ON "sync_outbox"("memory_id");
+CREATE INDEX "sync_outbox_created_at_idx" ON "sync_outbox"("created_at");
+
+CREATE TABLE "sync_conflicts" (
+  "memory_id" UUID NOT NULL,
+  "baseline_fact_id" UUID NOT NULL,
+  "candidate_fact_ids" JSONB NOT NULL,
+  "status" VARCHAR(16) NOT NULL,
+  "resolution_fact_id" UUID,
+  "updated_at" TIMESTAMPTZ(3) NOT NULL,
+  CONSTRAINT "sync_conflicts_pkey" PRIMARY KEY ("memory_id"),
+  CONSTRAINT "sync_conflicts_status_check" CHECK ("status" IN ('OPEN', 'RESOLVED')),
+  CONSTRAINT "sync_conflicts_candidates_array_check" CHECK (jsonb_typeof("candidate_fact_ids") = 'array'),
+  CONSTRAINT "sync_conflicts_memory_fkey" FOREIGN KEY ("memory_id") REFERENCES "memories"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "sync_conflicts_baseline_fkey" FOREIGN KEY ("baseline_fact_id") REFERENCES "facts"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "sync_conflicts_resolution_fkey" FOREIGN KEY ("resolution_fact_id") REFERENCES "facts"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+CREATE TABLE "sync_bootstrap_snapshots" (
+  "token" UUID NOT NULL,
+  "high_watermark" BIGINT NOT NULL,
+  "records" JSONB NOT NULL,
+  "expires_at" TIMESTAMPTZ(3) NOT NULL,
+  "created_at" TIMESTAMPTZ(3) NOT NULL,
+  CONSTRAINT "sync_bootstrap_snapshots_pkey" PRIMARY KEY ("token"),
+  CONSTRAINT "sync_bootstrap_snapshots_watermark_check" CHECK ("high_watermark" >= 0),
+  CONSTRAINT "sync_bootstrap_snapshots_records_array_check" CHECK (jsonb_typeof("records") = 'array')
+);
+CREATE INDEX "sync_bootstrap_snapshots_expires_at_idx" ON "sync_bootstrap_snapshots"("expires_at");
+
+ALTER TABLE "ledger_events"
+ADD CONSTRAINT "ledger_events_conflict_resolved_fact_link_check"
+CHECK (
+  "type" <> 'CONFLICT_RESOLVED'
+  OR ("fact_id" IS NOT NULL AND "supersedes_fact_id" IS NULL)
+);
+```
+
+`Fact.supersedesFactId` remains a non-unique legacy compatibility mirror for normal corrections only; FactRelation is authoritative. A `CONFLICT_RESOLVED` fact has no single authoritative legacy predecessor, so its legacy field is null and its multiple predecessors live exclusively in `fact_relations`.
+
+---
+
+## Exact IndexedDB v3 Shape
+
+Task 11 upgrades `mdp-local` to version `3` in the existing versionchange transaction.
+
+- Existing stores remain: `memories`, `evidence`, `ledgerEvents`, `facts`, `currentFacts`.
+- `factRelations`: keyPath `['predecessorFactId', 'successorFactId']`; indexes `memoryId`, `predecessorFactId`, `successorFactId`.
+- `syncOutbox`: keyPath `eventId`; indexes `memoryId`, `status`, `nextAttemptAt`.
+- `syncState`: keyPath `key`; no secondary index.
+- `syncConflicts`: keyPath `memoryId`; index `status`.
+- `bootstrapStaging`: keyPath `['bootstrapToken', 'recordKey']`; index `bootstrapToken`.
+- The old unique `facts.supersedesFactId` index is deleted during v3 upgrade. No replacement uniqueness constraint is created.
+- Existing Facts with `supersedesFactId` are backfilled into `factRelations` before the upgrade transaction completes.
+
+---
+
+### Task 1: Define protocol v1 schemas and stable sync semantics
+
+**Files:**
+- Create: `packages/contracts/src/sync.ts`
+- Create: `packages/contracts/src/sync.test.ts`
+- Modify: `packages/contracts/src/index.ts`
+
+**Interfaces:** Produces the exact protocol types listed above plus request/response Zod schemas for push, pull, bootstrap start/page, and structured top-level sync errors.
+
+- [ ] **Step 1: Write failing tests for version, cursors, envelopes, and outcomes**
+
+```ts
+expect(syncCursorSchema.parse('9007199254740993')).toBe('9007199254740993');
+expect(() => syncEventEnvelopeSchema.parse({ ...validEnvelope, protocolVersion: 2 })).toThrow();
+expect(syncPushEventResultSchema.parse({ eventId, status: 'CONFLICT' })).toEqual({ eventId, status: 'CONFLICT' });
+expect(syncPushEventResultSchema.parse({ eventId, status: 'DEPENDENCY_MISSING', missingFactIds: [factId] }).missingFactIds).toEqual([factId]);
+```
+
+- [ ] **Step 2: Run RED**
+
+Run: `pnpm exec vitest run packages/contracts/src/sync.test.ts`
+
+Expected: FAIL because `sync.ts` does not exist.
+
+- [ ] **Step 3: Implement exact schemas/types**
+
+Additional exact transport shapes:
+
+```ts
+export interface SyncPushRequest {
+  protocolVersion: 1;
+  clientInstanceId: string;
+  events: SyncEventEnvelope[];
+}
+export interface SyncPushResponse {
+  protocolVersion: 1;
+  results: SyncPushEventResult[];
+}
+export interface SyncPullEvent {
+  sequence: SyncCursor;
+  envelope: SyncEventEnvelope;
+}
+export interface SyncPullResponse {
+  protocolVersion: 1;
+  events: SyncPullEvent[];
+  nextCursor: SyncCursor;
+  hasMore: boolean;
+}
+export interface SyncBootstrapStartResponse {
+  protocolVersion: 1;
+  bootstrapToken: string;
+  highWatermarkCursor: SyncCursor;
+  totalRecords: number;
+}
+export interface SyncBootstrapPageResponse {
+  protocolVersion: 1;
+  bootstrapToken: string;
+  records: SyncCanonicalRecord[];
+  nextOffset: number | null;
+}
+```
+
+Push request schema requires `1..SYNC_MAX_BATCH_SIZE` at service validation time; contracts enforce nonempty arrays and individual field sizes using existing text/reason limits.
+
+- [ ] **Step 4: Export and verify**
 
 Run: `pnpm exec vitest run packages/contracts/src/sync.test.ts && pnpm typecheck`
 
@@ -182,7 +321,7 @@ git commit -m "feat(slice-04): define synchronization protocol contracts"
 
 ---
 
-### Task 2: Introduce the canonical Fact DAG and deterministic projection algorithm
+### Task 2: Implement canonical Fact DAG validation, ordering, and projection
 
 **Files:**
 - Create: `packages/domain/src/fact-graph.ts`
@@ -190,7 +329,6 @@ git commit -m "feat(slice-04): define synchronization protocol contracts"
 - Modify: `packages/domain/src/index.ts`
 
 **Interfaces:**
-- Produces:
 
 ```ts
 export interface FactGraphNode { factId: string; createdAt: Date; }
@@ -204,49 +342,39 @@ export type DerivedMemoryProjection =
   | { status: 'RESOLVED'; currentFactId: string }
   | { status: 'CONFLICT'; baselineFactId: string; candidateFactIds: string[] };
 export function deriveMemoryProjection(nodes: FactGraphNode[], relations: FactRelationRecord[]): DerivedMemoryProjection;
-export function orderFactGraphHistory(...): Array<{ factId: string; predecessorFactIds: string[] }>;
+export function orderFactGraphHistory(nodes: FactGraphNode[], relations: FactRelationRecord[]): Array<{ factId: string; predecessorFactIds: string[] }>;
 ```
 
-- [ ] **Step 1: Write RED tests for chain, branch, merge, concurrent resolution, cycles, and missing nodes**
+- [ ] **Step 1: Write RED tests**
 
-Required cases:
+Required graphs:
 
 ```text
-A→B→C             => RESOLVED C
-A→B and A→C       => CONFLICT baseline A candidates B,C
-A→B,A→C,B→D,C→D  => RESOLVED D
-A→B,A→C,B,C→D and B,C→E => CONFLICT baseline A candidates D,E
-A→B→A             => invalid graph
+A→B→C                            => RESOLVED C
+A→B and A→C                      => CONFLICT baseline A candidates B,C
+A→B,A→C,B→D,C→D                 => RESOLVED D
+A→B,A→C,B→D,C→D,B→E,C→E         => CONFLICT baseline A candidates D,E
+A→B→A                            => BROKEN_GRAPH
+missing relation endpoint         => BROKEN_GRAPH
 ```
 
-The conflict baseline is the deepest common **dominator**, not merely any common ancestor. Compute dominators in topological order:
-
-```ts
-dom(root) = {root}
-dom(node) = {node} ∪ intersection(dom(predecessor) for every predecessor)
-```
-
-For multiple leaf candidates, intersect their dominator sets and select the deepest common dominator. This preserves baseline `A` for concurrent resolutions `D` and `E`, where `B` and `C` are common ancestors but do not dominate all paths.
-
-- [ ] **Step 2: Run focused tests and verify RED**
+- [ ] **Step 2: Run RED**
 
 Run: `pnpm exec vitest run packages/domain/src/fact-graph.test.ts`
 
-Expected: FAIL because DAG logic does not exist.
+Expected: FAIL.
 
-- [ ] **Step 3: Implement graph validation/topological ordering/dominator projection**
+- [ ] **Step 3: Implement topological sort and deepest common dominator baseline**
 
-Rules:
+For root `R`, `dom(R)={R}`. For each non-root node in topological order:
 
-- exactly one root Fact per current memory graph;
-- every relation endpoint exists and belongs to the same memory;
-- no self-edge;
-- no cycle;
-- leaf Facts are Facts with no outgoing `SUPERSEDES` relation;
-- one leaf => resolved current Fact;
-- more than one leaf => conflict; candidates sorted by stable topological presentation order, not used as truth priority.
+```text
+dom(node) = {node} union intersection(dom(pred1), dom(pred2), ...)
+```
 
-- [ ] **Step 4: Run tests and full domain regression**
+With multiple leaf candidates, intersect all leaf dominator sets and select the deepest member by topological depth. Presentation ties sort by `createdAt` then `factId`; this order is presentation-only and never resolves truth.
+
+- [ ] **Step 4: Verify domain regression**
 
 Run: `pnpm exec vitest run packages/domain/src/fact-graph.test.ts packages/domain/src/correction.test.ts packages/domain/src/memory.test.ts`
 
@@ -261,7 +389,7 @@ git commit -m "feat(slice-04): model causal fact graph"
 
 ---
 
-### Task 3: Add append-only conflict resolution domain records and graph-aware response contracts
+### Task 3: Add append-only conflict resolution and graph-aware memory contracts
 
 **Files:**
 - Create: `packages/domain/src/conflict-resolution.ts`
@@ -272,14 +400,9 @@ git commit -m "feat(slice-04): model causal fact graph"
 - Modify: `packages/contracts/src/memory.ts`
 - Modify: `packages/contracts/src/memory.test.ts`
 
-**Interfaces:**
-- Produces `createConflictResolutionRecord()` with one new Evidence, one new Fact, one `CONFLICT_RESOLVED` LedgerEvent, and one FactRelation from each candidate to the new Fact.
-- Extends query response with explicit `CONFLICT` state.
-- Extends history versions with `predecessorFactIds: string[]`; keep existing `supersedesFactId` for normal legacy compatibility, but do not use it as authoritative causal data.
+**Interfaces:** `createConflictResolutionRecord()` creates one new Evidence, Fact, `CONFLICT_RESOLVED` LedgerEvent (`factId=newFact`, `supersedesFactId=null`), and one FactRelation from every expected candidate to the new Fact.
 
-- [ ] **Step 1: Write failing tests**
-
-Resolution test must require two predecessors and prove a new Fact is created even when chosen text equals a candidate:
+- [ ] **Step 1: Write RED resolution tests**
 
 ```ts
 const result = createConflictResolutionRecord({
@@ -290,51 +413,50 @@ const result = createConflictResolutionRecord({
   resolvedAt,
   ids: { evidenceId, eventId, factId: factD },
 });
-expect(result.relations.map((r) => r.predecessorFactId).sort()).toEqual([factB, factC].sort());
+expect(result.relations.map((item) => item.predecessorFactId).sort()).toEqual([factB, factC].sort());
 expect(result.event.type).toBe('CONFLICT_RESOLVED');
-expect(result.fact.id).toBe(factD);
+expect(result.event.factId).toBe(factD);
+expect(result.event.supersedesFactId).toBeNull();
 ```
 
-- [ ] **Step 2: Run RED tests**
+Candidate IDs must be unique, at least two, and match the currently open conflict at repository application time.
 
-Run: `pnpm exec vitest run packages/domain/src/conflict-resolution.test.ts packages/contracts/src/memory.test.ts`
+- [ ] **Step 2: Add RED contract tests for conflict query/history**
 
-Expected: FAIL.
-
-- [ ] **Step 3: Implement resolution and response schemas**
-
-Add a request contract equivalent to:
+Add request:
 
 ```ts
-{
-  expectedCandidateFactIds: string[]; // minimum 2, unique
+interface ResolveConflictRequest {
+  expectedCandidateFactIds: string[];
   text: string;
   reason?: string;
 }
 ```
 
-Add query result shape equivalent to:
+Add query variant:
 
 ```ts
-{
+interface MemoryConflictResponse {
   status: 'CONFLICT';
   answer: null;
   provenance: null;
   conflict: {
     memoryId: string;
-    baseline: { factId: string; content: string };
+    baseline: { factId: string; evidenceId: string; content: string };
     candidates: Array<{ factId: string; evidenceId: string; content: string }>;
   };
 }
 ```
 
-- [ ] **Step 4: Run contract/domain tests and typecheck**
+Every history version adds `predecessorFactIds: string[]`. Existing `supersedesFactId` remains for backward-compatible normal corrections and is null for roots/multi-predecessor resolutions.
 
-Run: `pnpm exec vitest run packages/domain/src packages/contracts/src && pnpm typecheck`
+- [ ] **Step 3: Implement and verify**
+
+Run: `pnpm exec vitest run packages/domain/src/conflict-resolution.test.ts packages/contracts/src/memory.test.ts && pnpm typecheck`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add packages/domain/src packages/contracts/src/memory.ts packages/contracts/src/memory.test.ts
@@ -343,71 +465,34 @@ git commit -m "feat(slice-04): define conflict resolution domain flow"
 
 ---
 
-### Task 4: Migrate PostgreSQL to FactRelation + commit-ordered sync infrastructure
+### Task 4: Apply exact PostgreSQL Slice 04 migration
 
 **Files:**
 - Modify: `prisma/schema.prisma`
 - Create: `prisma/migrations/20260818000100_slice_04_synchronization/migration.sql`
-- Modify/Test: `apps/api/src/infrastructure/persistence/prisma/prisma.service.integration.test.ts`
+- Modify: `apps/api/src/infrastructure/persistence/prisma/prisma.service.integration.test.ts`
 
-**Interfaces:**
-- Produces physical tables: `fact_relations`, `sync_feed_state`, `sync_outbox`, `sync_conflicts`, `sync_bootstrap_snapshots`.
-- Keeps existing canonical tables and historical UUIDs.
+**Interfaces:** Produces exactly the physical schema defined above; preserves all previous rows/UUIDs.
 
-- [ ] **Step 1: Write/extend real PostgreSQL integration assertions before migration**
+- [ ] **Step 1: Add a migration upgrade test fixture**
 
-Assertions after migration must include:
+In the real-PostgreSQL verification path, apply migrations through Slice 02, insert synthetic root A + corrected Fact B with legacy `supersedes_fact_id=A`, then apply the Slice 04 migration. Assert the new `fact_relations` row is exactly `(memoryId,A,B,'SUPERSEDES')` and all old rows still exist.
 
-```sql
-SELECT count(*) FROM fact_relations;
-SELECT current_sequence FROM sync_feed_state WHERE id = 1;
-SELECT count(*) FROM pg_indexes WHERE indexname = 'facts_supersedes_fact_id_key'; -- must be 0
-```
+- [ ] **Step 2: Implement the exact DDL above**
 
-Seed one existing linear correction before applying the Slice 04 migration in a dedicated migration verification path and assert the corresponding `fact_relations` row exists after migration.
+Also update Prisma `Fact` self-relation from one-to-one successor semantics to non-unique legacy successors and add authoritative `FactRelation` models/relations. `SyncOutbox.sequence` has no autoincrement/default.
 
-- [ ] **Step 2: Write the migration**
-
-Migration requirements:
+- [ ] **Step 3: Add physical assertions**
 
 ```sql
-DROP INDEX IF EXISTS "facts_supersedes_fact_id_key";
-
-CREATE TABLE "fact_relations" (
-  "memory_id" UUID NOT NULL,
-  "predecessor_fact_id" UUID NOT NULL,
-  "successor_fact_id" UUID NOT NULL,
-  "relation_type" VARCHAR(32) NOT NULL,
-  PRIMARY KEY ("predecessor_fact_id", "successor_fact_id")
-);
-
-INSERT INTO "fact_relations" (...)
-SELECT memory_id, supersedes_fact_id, id, 'SUPERSEDES'
-FROM facts
-WHERE supersedes_fact_id IS NOT NULL;
+SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND indexname='facts_supersedes_fact_id_key';
+SELECT current_sequence FROM sync_feed_state WHERE id=1;
+SELECT relation_type FROM fact_relations WHERE predecessor_fact_id=$1 AND successor_fact_id=$2;
 ```
 
-Add FK constraints to memory/fact records with `ON DELETE RESTRICT` and indexes for `memory_id`, predecessor, successor.
+Expected unique-index count `0`, initial feed state `0`, and relation type `SUPERSEDES`.
 
-Create a singleton transactional feed counter:
-
-```sql
-CREATE TABLE "sync_feed_state" (
-  "id" INTEGER PRIMARY KEY,
-  "current_sequence" BIGINT NOT NULL
-);
-INSERT INTO "sync_feed_state" ("id", "current_sequence") VALUES (1, 0);
-```
-
-Create Outbox with explicit sequence PK, unique `event_id`, payload hash, JSONB immutable payload, nullable UUID `origin_client_instance_id`, and timestamps. Create `sync_conflicts` as a reconstructible current projection and `sync_bootstrap_snapshots` with UUID token, `high_watermark`, JSONB records, expiry, and created timestamp.
-
-- [ ] **Step 3: Update Prisma models**
-
-Keep `Fact.supersedesFactId` only as a legacy compatibility mirror and remove `@unique`. Add authoritative `FactRelation` relations. Do not model Outbox sequence with an autoincrement default; it is allocated transactionally from `sync_feed_state`.
-
-- [ ] **Step 4: Apply migration on real PostgreSQL and verify**
-
-Run:
+- [ ] **Step 4: Validate from clean and upgraded databases**
 
 ```bash
 docker compose up -d postgres
@@ -417,7 +502,7 @@ pnpm db:migrate
 DATABASE_URL=postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp pnpm exec vitest run apps/api/src/infrastructure/persistence/prisma/prisma.service.integration.test.ts
 ```
 
-Expected: PASS and no historical row loss.
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -428,53 +513,57 @@ git commit -m "feat(slice-04): migrate synchronization persistence schema"
 
 ---
 
-### Task 5: Build a shared transactional canonical writer with commit-ordered Outbox publication
+### Task 5: Build common transactional canonical writer and commit-ordered feed allocation
 
 **Files:**
 - Create: `apps/api/src/infrastructure/persistence/prisma/prisma-canonical-memory.writer.ts`
 - Create: `apps/api/src/infrastructure/persistence/prisma/prisma-canonical-memory.writer.integration.test.ts`
 
 **Interfaces:**
-- Produces `PrismaCanonicalMemoryWriter.writeEnvelope(tx, envelope, originClientInstanceId)` and `allocateFeedSequence(tx): Promise<bigint>`.
-- Consumes protocol envelopes and domain projection derivation.
 
-- [ ] **Step 1: Write RED integration tests for atomicity and sequence ordering**
-
-Required proofs:
-
-1. canonical rows + relations + conflict projection + Outbox all appear after commit;
-2. forced failure before Outbox causes total rollback;
-3. two concurrent writers receive feed sequence in commit-lock order;
-4. rolled-back sequence allocation does not consume a visible feed sequence.
-
-- [ ] **Step 2: Implement transactionally serialized sequence allocation**
-
-Use the singleton row, not `BIGSERIAL`:
-
-```sql
-UPDATE sync_feed_state
-SET current_sequence = current_sequence + 1
-WHERE id = 1
-RETURNING current_sequence;
+```ts
+class PrismaCanonicalMemoryWriter {
+  writeEnvelope(tx: PrismaTransactionClient, envelope: SyncEventEnvelope, originClientInstanceId: string | null): Promise<DerivedMemoryProjection>;
+}
+async function allocateFeedSequence(tx: PrismaTransactionClient): Promise<bigint>;
 ```
 
-The row update lock serializes sequence assignment inside the same transaction. A concurrent transaction cannot receive `N+1` until the transaction holding `N` releases the lock by commit/rollback. This makes a bootstrap `highWatermarkCursor` safe against hidden later commits with sequence `<= N`.
+- [ ] **Step 1: Write RED real-DB atomicity/concurrency tests**
 
-- [ ] **Step 3: Implement immutable payload hashing**
+Prove canonical+relations+projection+Outbox commit together; forced failure before Outbox rolls everything back; two concurrent accepted writers get serialized visible sequences; rollback of sequence allocation leaves `current_sequence` unchanged.
 
-Canonicalize parsed envelope JSON by recursively sorting object keys and SHA-256 hash the canonical string. Store the 64-hex hash in `sync_outbox.payload_hash`. Never compare idempotency by text search or timestamps.
+- [ ] **Step 2: Implement sequence allocation with singleton row update**
 
-- [ ] **Step 4: Implement canonical inserts + projection rebuild + Outbox insert**
+Execute within the same transaction:
 
-For new immutable records, reject an existing same ID with different canonical content. An accepted conflict still writes the event and Outbox; projection becomes `OPEN`, but the event is acknowledged.
+```sql
+UPDATE "sync_feed_state"
+SET "current_sequence" = "current_sequence" + 1
+WHERE "id" = 1
+RETURNING "current_sequence";
+```
 
-- [ ] **Step 5: Run focused real-DB tests**
+The row lock is the ordering primitive. Do not call PostgreSQL sequence functions.
+
+- [ ] **Step 3: Implement canonical payload hash**
+
+Recursively sort object keys, preserve array order from validated contract, stringify, SHA-256, and store lowercase 64-hex `payload_hash`. Idempotency compares this hash.
+
+- [ ] **Step 4: Apply immutable records safely**
+
+Existing same-ID immutable rows must canonical-compare equal; otherwise throw integrity violation. Insert FactRelations, derive projection, update `CurrentFact`, and upsert `sync_conflicts`. For resolved state with a prior OPEN conflict, set it `RESOLVED` with `resolution_fact_id=currentFactId`; for a fresh chain with no prior conflict, no conflict row is required.
+
+- [ ] **Step 5: Allocate feed sequence, insert Outbox, and prune inside the transaction**
+
+Sequence allocation occurs after canonical validation and before commit. Outbox payload is the validated envelope. Pruning is added in Task 8.
+
+- [ ] **Step 6: Verify**
 
 Run: `DATABASE_URL=postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp pnpm exec vitest run apps/api/src/infrastructure/persistence/prisma/prisma-canonical-memory.writer.integration.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add apps/api/src/infrastructure/persistence/prisma/prisma-canonical-memory.writer*
@@ -483,34 +572,27 @@ git commit -m "feat(slice-04): add transactional canonical sync writer"
 
 ---
 
-### Task 6: Route existing PostgreSQL memory writes through the transactional writer
+### Task 6: Route existing server memory create/correct through the common writer
 
 **Files:**
 - Modify: `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.ts`
 - Modify: `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts`
 
-**Interfaces:**
-- Existing `MemoryStore` HTTP behavior remains compatible.
-- Direct server-origin operations publish `originClientInstanceId = null`.
+**Interfaces:** Public `MemoryStore` behavior stays compatible; direct server-origin Outbox rows use `originClientInstanceId=null`.
 
-- [ ] **Step 1: Add RED regression assertions**
+- [ ] **Step 1: Add RED assertions after existing store create/correct**
 
-After existing `/memories`-equivalent create/correct store operations, assert:
+Create produces one Outbox row matching the `MEMORY_CREATED` event ID. Correct produces one FactRelation predecessor→successor and one Outbox row matching the `MEMORY_CORRECTED` event ID. Definitive UUIDs are unchanged.
 
-- matching `fact_relations` edge exists for correction;
-- one `sync_outbox` row exists for each LedgerEvent;
-- Outbox envelope uses the exact existing UUIDs;
-- `CurrentFact` remains correct.
+- [ ] **Step 2: Construct exact self-contained envelopes from existing domain records**
 
-- [ ] **Step 2: Extract envelope construction from existing records**
+Every create/correct envelope includes the existing Memory record plus its event-specific Evidence, LedgerEvent, Fact, and correction relation when applicable.
 
-For `MEMORY_CREATED`, envelope records include Memory, Evidence, LedgerEvent, Fact. For `MEMORY_CORRECTED`, include Memory, new Evidence, LedgerEvent, new Fact, and the `FactRelation` predecessor→successor edge.
+- [ ] **Step 3: Replace duplicated canonical transaction writes with `PrismaCanonicalMemoryWriter`**
 
-- [ ] **Step 3: Replace duplicated Prisma write transaction with common writer**
+Keep existing outage error mapping and service/controller response types unchanged.
 
-Do not change public `MemoryStore` result types. Keep PostgreSQL outage mapping behavior unchanged.
-
-- [ ] **Step 4: Run existing + new store integration tests**
+- [ ] **Step 4: Verify existing integration suite**
 
 Run: `DATABASE_URL=postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp pnpm exec vitest run apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts`
 
@@ -525,7 +607,7 @@ git commit -m "refactor(slice-04): publish server memory writes to sync outbox"
 
 ---
 
-### Task 7: Implement server `push` with idempotency, dependency recovery, and accepted-conflict semantics
+### Task 7: Implement server push idempotency, dependency recovery, and accepted conflicts
 
 **Files:**
 - Create: `apps/api/src/sync/sync.store.ts`
@@ -533,35 +615,33 @@ git commit -m "refactor(slice-04): publish server memory writes to sync outbox"
 - Create: `apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.integration.test.ts`
 
 **Interfaces:**
-- Produces `SyncStore.pushEvent(clientInstanceId, envelope): Promise<SyncPushEventResult>`.
-- Uses one PostgreSQL transaction per pushed event.
 
-- [ ] **Step 1: Write RED real-DB tests for every push outcome**
+```ts
+export const SYNC_STORE = Symbol('SYNC_STORE');
+export interface SyncStore {
+  pushEvent(clientInstanceId: string, envelope: SyncEventEnvelope): Promise<SyncPushEventResult>;
+}
+```
 
-Cases:
+- [ ] **Step 1: Write RED real-DB outcome tests**
 
-- new create => `APPLIED`;
-- replay same `eventId`/same payload => `ALREADY_APPLIED`, no duplicate rows;
-- same `eventId`/different payload hash => `INVALID` with integrity code, no write;
-- missing predecessor => `DEPENDENCY_MISSING` and zero partial writes;
-- second successor to same predecessor => event durably written, `CONFLICT`, open conflict projection, Outbox row present;
-- accepted `CONFLICT` replay => `ALREADY_APPLIED`.
+Cases: new event→`APPLIED`; exact replay→`ALREADY_APPLIED`; same eventId/different payload→`INVALID/SYNC_INTEGRITY_VIOLATION`; absent predecessor→`DEPENDENCY_MISSING` with zero writes; second valid successor→durably accepted `CONFLICT`; replay accepted conflict→`ALREADY_APPLIED`.
 
-- [ ] **Step 2: Implement idempotency check before mutation**
+- [ ] **Step 2: Idempotency check by Outbox `event_id` + `payload_hash`**
 
-Query by `event_id`. If present, compare payload hash. Same hash acknowledges. Different hash fails closed.
+If same ID/hash exists, acknowledge without reapplying. If same ID/different hash exists, fail closed.
 
-- [ ] **Step 3: Implement dependency validation**
+- [ ] **Step 3: Validate dependencies before canonical mutation**
 
-Every predecessor Fact ID in the envelope must exist before application unless that Fact is included as an immutable dependency in the same envelope. Missing IDs return them explicitly and do not create Outbox rows.
+Every `predecessorFactId` must already exist or be present as a Fact record in the same self-contained envelope. Missing IDs return sorted unique `missingFactIds` and create no canonical/Outbox row.
 
-- [ ] **Step 4: Apply via `PrismaCanonicalMemoryWriter` and derive result**
+- [ ] **Step 4: Apply via common writer and derive status**
 
-After write/reprojection, return `CONFLICT` if the resulting memory projection is open conflict; otherwise `APPLIED`.
+Resulting OPEN conflict returns `CONFLICT`; otherwise `APPLIED`. The conflict event is already durable and must not remain pending on the sender.
 
-- [ ] **Step 5: Run integration tests**
+- [ ] **Step 5: Verify**
 
-Run: `DATABASE_URL=postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp pnpm exec vitest run apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.integration.test.ts`
+Run: `DATABASE_URL=postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp pnpm exec vitest run apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.integration.test.ts -t push`
 
 Expected: PASS.
 
@@ -574,57 +654,64 @@ git commit -m "feat(slice-04): implement idempotent sync push"
 
 ---
 
-### Task 8: Implement monotonic `pull`, bounded retention, and cursor expiration
+### Task 8: Implement pull, exact cursor-expiry semantics, and bounded Outbox retention
 
 **Files:**
 - Modify: `apps/api/src/sync/sync.store.ts`
 - Modify: `apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.ts`
 - Modify: `apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.integration.test.ts`
 - Modify: `apps/api/src/config/env.ts`
-- Create/Modify: `apps/api/src/config/env.test.ts`
+- Create or Modify: `apps/api/src/config/env.test.ts`
 
 **Interfaces:**
-- Adds `pull(after: SyncCursor, limit: number)`.
-- Adds config `SYNC_MAX_BATCH_SIZE` and `SYNC_OUTBOX_MAX_ENTRIES` with bounded positive integer defaults.
-
-- [ ] **Step 1: Write RED tests**
-
-Require:
-
-- strict `sequence > after`, ascending;
-- server clamps/rejects above max according to contract;
-- `nextCursor` equals last returned sequence after a nonempty page;
-- `hasMore` true only when retained later rows exist;
-- if `after` predates retained floor while `currentSequence > after`, return `SYNC_CURSOR_EXPIRED`;
-- Outbox pruning never deletes Memory/Evidence/LedgerEvent/Fact/FactRelation.
-
-- [ ] **Step 2: Parse sync operational config**
-
-Use exact API env fields:
 
 ```ts
-syncMaxBatchSize: number;
-syncOutboxMaxEntries: number;
-syncBootstrapTtlSeconds: number;
+pull(after: SyncCursor, limit: number): Promise<SyncPullResponse>;
 ```
 
-Recommended defaults for non-test runtime: `50`, `10000`, `900` respectively. They are operational defaults, not domain semantics.
+Exact operational defaults:
 
-- [ ] **Step 3: Implement bounded retention**
+```text
+SYNC_MAX_BATCH_SIZE=50
+SYNC_OUTBOX_MAX_ENTRIES=10000
+SYNC_BOOTSTRAP_TTL_SECONDS=900
+```
 
-Because feed sequence is transactionally contiguous, after accepting sequence `N`, retain at most configured entries by deleting Outbox rows with `sequence <= N - maxEntries`. Execute pruning without touching canonical rows.
+- [ ] **Step 1: Write RED pull/retention tests**
 
-- [ ] **Step 4: Implement pull/cursor-expired rules**
+Require strict ascending `sequence > after`, decimal-string JSON cursors, bounded limit, `nextCursor`, `hasMore`, pruning, and canonical data preservation.
 
-If no row exists at/before the requested cursor because retention removed required feed history, return the structured expiration result; clients rebootstrap.
+- [ ] **Step 2: Implement exact cursor validation**
 
-- [ ] **Step 5: Run tests**
+Let `current` be `sync_feed_state.current_sequence` and `oldest` be minimum retained Outbox sequence.
 
-Run: `pnpm exec vitest run apps/api/src/config/env.test.ts && DATABASE_URL=postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp pnpm exec vitest run apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.integration.test.ts`
+```text
+after > current                         => INVALID / SYNC_INTEGRITY_VIOLATION
+after = current                         => empty page, nextCursor=after, hasMore=false
+current = 0                             => empty page
+oldest is null AND after < current      => SYNC_CURSOR_EXPIRED
+oldest is not null AND after < oldest-1 => SYNC_CURSOR_EXPIRED
+otherwise                               => query retained rows with sequence > after
+```
+
+`after = oldest-1` is valid because the next required event is exactly the oldest retained event.
+
+- [ ] **Step 3: Implement retention inside accepted-event transaction**
+
+After assigning accepted sequence `N`, delete only Outbox rows satisfying `sequence <= N - SYNC_OUTBOX_MAX_ENTRIES`. Never cascade or manually delete canonical rows.
+
+- [ ] **Step 4: Verify config and real DB behavior**
+
+Run:
+
+```bash
+pnpm exec vitest run apps/api/src/config/env.test.ts
+DATABASE_URL=postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp pnpm exec vitest run apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.integration.test.ts -t pull
+```
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/config apps/api/src/sync/sync.store.ts apps/api/src/infrastructure/persistence/prisma/prisma-sync.store*
@@ -633,7 +720,7 @@ git commit -m "feat(slice-04): add pull cursor and outbox retention"
 
 ---
 
-### Task 9: Implement fixed-snapshot paginated bootstrap
+### Task 9: Implement consistent fixed-snapshot paginated bootstrap
 
 **Files:**
 - Modify: `apps/api/src/sync/sync.store.ts`
@@ -641,41 +728,41 @@ git commit -m "feat(slice-04): add pull cursor and outbox retention"
 - Modify: `apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.integration.test.ts`
 
 **Interfaces:**
-- Produces `startBootstrap(clientInstanceId)` and `readBootstrapPage(token, offset, limit)`.
-- Bootstrap snapshot stores flattened immutable canonical records only; projections are rebuilt by the client.
 
-- [ ] **Step 1: Write RED real-DB bootstrap tests**
+```ts
+startBootstrap(clientInstanceId: string): Promise<SyncBootstrapStartResponse>;
+readBootstrapPage(token: string, offset: number, limit: number): Promise<SyncBootstrapPageResponse>;
+```
 
-Prove:
+- [ ] **Step 1: Write RED bootstrap tests**
 
-- pre-Slice04/server history not represented in Outbox is still included;
-- `highWatermarkCursor` and snapshot are from one logical PostgreSQL snapshot;
-- a concurrent write that commits after snapshot creation receives a sequence `> highWatermarkCursor` and appears in later pull, not silently inside later bootstrap pages;
-- pages from one token are stable even while server changes;
-- expired token returns `SYNC_BOOTSTRAP_EXPIRED`;
-- no canonical data is changed by bootstrap.
+Prove pre-Outbox historical rows are included; snapshot/high-water mark are consistent; concurrent post-snapshot write appears only in later pull with sequence greater than watermark; pages are stable; expired token is rejected; bootstrap never mutates canonical data.
 
-- [ ] **Step 2: Start bootstrap in `REPEATABLE READ` transaction**
+- [ ] **Step 2: Materialize snapshot in one `RepeatableRead` transaction**
 
-Within one Prisma transaction with `isolationLevel: 'RepeatableRead'`:
+Read `sync_feed_state.current_sequence`, then all immutable Memory/Evidence/LedgerEvent/Fact/FactRelation rows visible to the same snapshot. Flatten to `SyncCanonicalRecord[]`. Deterministic kind rank is exactly:
 
-1. read `sync_feed_state.current_sequence` as high-water mark;
-2. read all immutable canonical Memory/Evidence/LedgerEvent/Fact/FactRelation records visible to that snapshot;
-3. flatten and deterministically sort records by `(memoryId, kindRank, stableRecordKey)`;
-4. store that exact array in `sync_bootstrap_snapshots.records` with UUID-v7 token and expiry;
-5. commit.
+```text
+memory=0
+evidence=1
+ledgerEvent=2
+fact=3
+factRelation=4
+```
 
-Commit-ordered feed allocation from Task 5 guarantees any write not visible in this snapshot later receives a cursor above the captured high-water mark.
+Sort by `memoryId`, then kind rank, then stable record key (`id` for entity/event/fact; `predecessorFactId + ':' + successorFactId` for relation). Store exact JSON array with UUID-v7 token, watermark, expiry `now + SYNC_BOOTSTRAP_TTL_SECONDS`, and createdAt.
 
-- [ ] **Step 3: Implement page reads**
+Commit-ordered feed allocation ensures a write invisible to this Repeatable Read snapshot receives a feed cursor greater than the captured watermark when it commits.
 
-Page by integer `offset`/`limit` into the materialized snapshot JSON. Return `nextOffset: null` at completion. Never rebuild a page from live canonical tables.
+- [ ] **Step 3: Page only the stored snapshot**
 
-- [ ] **Step 4: Implement opportunistic snapshot cleanup**
+Validate offset `>=0`, limit `1..SYNC_MAX_BATCH_SIZE`, slice stored array, and return `nextOffset=null` at end. Do not read live canonical tables for later pages.
 
-Delete expired snapshot rows on bootstrap start/read. This cleanup is infrastructure-only.
+- [ ] **Step 4: Cleanup expired snapshots opportunistically**
 
-- [ ] **Step 5: Run bootstrap integration tests**
+Delete rows with `expires_at <= now` at bootstrap start/read; this is operational cleanup only.
+
+- [ ] **Step 5: Verify**
 
 Run: `DATABASE_URL=postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp pnpm exec vitest run apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.integration.test.ts -t bootstrap`
 
@@ -690,7 +777,7 @@ git commit -m "feat(slice-04): add consistent paginated bootstrap"
 
 ---
 
-### Task 10: Expose versioned NestJS sync endpoints with stable structured errors
+### Task 10: Expose NestJS sync endpoints with stable structured errors
 
 **Files:**
 - Create: `apps/api/src/sync/sync.service.ts`
@@ -699,33 +786,32 @@ git commit -m "feat(slice-04): add consistent paginated bootstrap"
 - Create: `apps/api/src/sync/sync.controller.test.ts`
 - Modify: `apps/api/src/app.module.ts`
 
-**Interfaces:**
-- Endpoints:
+**Endpoints:**
 
 ```text
 POST /sync/v1/bootstrap/start
 GET  /sync/v1/bootstrap/:token?offset=0&limit=50
 POST /sync/v1/push
-GET  /sync/v1/pull?after=<decimal>&limit=50
+GET  /sync/v1/pull?after=<decimal-cursor>&limit=50
 ```
 
-- [ ] **Step 1: Write controller/service RED tests**
+- [ ] **Step 1: Write RED controller/service tests**
 
-Verify version mismatch, invalid limit/cursor, push result forwarding, bootstrap expiration, cursor expiration, and service-unavailable mapping. Assert error body uses stable `code` and does not leak SQL/payload contents.
+Cover unsupported protocol, invalid cursor/limit, push per-event results, cursor/bootstrap expiration, integrity violation, and PostgreSQL unavailability. Error body exposes stable `code` and never SQL/payload text.
 
-- [ ] **Step 2: Implement service validation**
+- [ ] **Step 2: Implement schema-first service validation**
 
-Parse all requests with `@mdp/contracts`; never infer semantics from raw HTTP fields after validation.
+Parse all request/response boundaries with `@mdp/contracts`. Process push events sequentially or with bounded order-preserving iteration so each event owns one independent transaction and response order matches request order.
 
-- [ ] **Step 3: Implement controller status mapping**
+- [ ] **Step 3: Map transport status without replacing stable codes**
 
-Use transport statuses consistently, e.g. unsupported protocol `400`, expired cursor/bootstrap `410`, invalid/integrity `409/422` as appropriate, database/transient outage `503`. Per-event push results remain in a successful batch response because one event result must not abort independent events.
+Use `400` protocol/validation, `409` integrity conflict, `410` cursor/bootstrap expired, `422` semantic/dependency rejection when top-level, `503` persistence outage. Push per-event domain outcomes remain a `200` batch response because one event cannot abort independent neighbors.
 
-- [ ] **Step 4: Register providers/controller in `AppModule`**
+- [ ] **Step 4: Register providers/controller**
 
-Wire `PrismaSyncStore` through a symbol such as `SYNC_STORE`, and `SyncService` through `SYNC_SERVICE`; inject existing `PrismaService`, env, and `createId`.
+`AppModule` injects existing `PrismaService`, parsed env limits, clock, and `createId` into `PrismaSyncStore`/`SyncService`.
 
-- [ ] **Step 5: Run API unit regression**
+- [ ] **Step 5: Verify API unit regression**
 
 Run: `pnpm exec vitest run apps/api/src/sync apps/api/src/memories apps/api/src/health`
 
@@ -740,30 +826,19 @@ git commit -m "feat(slice-04): expose synchronization API"
 
 ---
 
-### Task 11: Upgrade IndexedDB from v2 to v3 and backfill causal relations
+### Task 11: Upgrade IndexedDB v2 → v3 exactly and backfill FactRelation
 
 **Files:**
 - Modify: `apps/web/src/lib/indexeddb/mdp-local-db.ts`
 - Modify: `apps/web/src/lib/indexeddb/mdp-local-db.test.ts`
 
-**Interfaces:**
-- `MDP_LOCAL_DB_VERSION = 3`.
-- New stores: `factRelations`, `syncOutbox`, `syncState`, `syncConflicts`, `bootstrapStaging`.
+**Interfaces:** Implements the exact IndexedDB v3 shape above.
 
-- [ ] **Step 1: Write RED migration tests from a real v2 fixture**
+- [ ] **Step 1: Write RED v2 fixture migration test**
 
-Seed v2 with root A and correction B where B has legacy `supersedesFactId=A`. Upgrade and assert:
+Seed v2 with Memory, root Fact A, correction Fact B (`supersedesFactId=A`), Evidence, LedgerEvents, CurrentFact. Upgrade to v3 and assert every old row/UUID/content survives, relation A→B exists, and C with legacy `supersedesFactId=A` can now be inserted because the old unique index is gone.
 
-- all five existing stores/rows remain;
-- `factRelations` contains `A→B`;
-- the old unique `facts.supersedesFactId` index no longer blocks inserting C with `supersedesFactId=A`;
-- new stores/indexes exist;
-- database remains writable;
-- all original UUIDs/content remain byte-for-byte equivalent.
-
-- [ ] **Step 2: Define v3 record types**
-
-At minimum:
+- [ ] **Step 2: Define exact v3 record types**
 
 ```ts
 interface LocalFactRelationRecord {
@@ -781,15 +856,30 @@ interface LocalSyncOutboxRecord {
   nextAttemptAt: Date | null;
   lastErrorCode: string | null;
 }
+interface LocalSyncStateRecord {
+  key: 'clientInstanceId' | 'confirmedCursor' | 'bootstrap';
+  value: unknown;
+}
+interface LocalSyncConflictRecord {
+  memoryId: string;
+  baselineFactId: string;
+  candidateFactIds: string[];
+  status: 'OPEN' | 'RESOLVED';
+  resolutionFactId: string | null;
+  updatedAt: Date;
+}
+interface LocalBootstrapStagingRecord {
+  bootstrapToken: string;
+  recordKey: string;
+  record: SyncCanonicalRecord;
+}
 ```
 
-`syncState` stores `clientInstanceId`, confirmed server cursor, and bootstrap metadata as named keys. `syncConflicts` is keyed by `memoryId`. `bootstrapStaging` is keyed by `[bootstrapToken, recordKey]` and indexed by token.
+- [ ] **Step 3: Implement `upgradeToV3` in the versionchange transaction**
 
-- [ ] **Step 3: Implement `upgradeToV3` inside the IndexedDB versionchange transaction**
+Create stores/indexes exactly as specified. Delete `facts` index `supersedesFactId`. Cursor all existing Facts and add FactRelation rows for each non-null legacy predecessor. Any failure aborts upgrade.
 
-Create new stores, delete the old unique `supersedesFactId` index from `facts`, cursor existing Facts, and add one `FactRelation` for every legacy `supersedesFactId`. Any constraint/data failure aborts the upgrade transaction.
-
-- [ ] **Step 4: Run migration tests**
+- [ ] **Step 4: Verify**
 
 Run: `pnpm exec vitest run apps/web/src/lib/indexeddb/mdp-local-db.test.ts`
 
@@ -804,56 +894,52 @@ git commit -m "feat(slice-04): migrate local database to sync v3"
 
 ---
 
-### Task 12: Make local create/correct/resolve atomically enqueue synchronization events
+### Task 12: Make local create/correct/resolve atomically enqueue events and use DAG history
 
 **Files:**
 - Modify: `apps/web/src/lib/memory-repository.ts`
 - Modify: `apps/web/src/lib/indexeddb/indexeddb-memory-repository.ts`
 - Modify: `apps/web/src/lib/indexeddb/indexeddb-memory-repository.test.ts`
+- Modify: `apps/web/src/lib/memory-repository.test.ts`
 
-**Interfaces:**
-- Add `resolveConflict(memoryId, request)`.
-- Add local error code `CONFLICT_REQUIRES_RESOLUTION`.
-- Local create/correct/resolve transaction includes canonical rows + FactRelations + local `syncOutbox` record.
+**Interfaces:** Adds `resolveConflict(memoryId, request)` and local error `CONFLICT_REQUIRES_RESOLUTION`.
 
 - [ ] **Step 1: Write RED atomicity tests**
 
-Require:
+Create→one pending `MEMORY_CREATED` envelope; correct→relation + pending `MEMORY_CORRECTED`; injected `syncOutbox.add()` failure aborts whole local domain mutation; correction while conflict OPEN rejects; resolve→new Evidence/Fact/Event + relation from every candidate + pending `CONFLICT_RESOLVED`.
 
-- create adds one `MEMORY_CREATED` pending envelope in same transaction;
-- correct adds one relation and one `MEMORY_CORRECTED` pending envelope;
-- injected `syncOutbox.add()` failure aborts the domain mutation, proving no false local success;
-- correction against an OPEN conflict throws `CONFLICT_REQUIRES_RESOLUTION`;
-- resolve creates new Evidence/Fact/Event plus relations from all candidate Facts and one `CONFLICT_RESOLVED` pending envelope.
+- [ ] **Step 2: Replace ambiguous store list constants**
 
-- [ ] **Step 2: Replace `PRODUCT_STORES` transaction lists with explicit canonical+sync mutation store sets**
+Keep `CANONICAL_STORES = ['memories','evidence','ledgerEvents','facts','currentFacts','factRelations']`, `SYNC_STORES = ['syncOutbox','syncState','syncConflicts','bootstrapStaging']`, and use explicit transaction store arrays per operation.
 
-Do not hide sync stores inside a name that still claims “five product stores”. Introduce clear constants such as `CANONICAL_STORES`, `SYNC_STORES`, `LOCAL_MUTATION_STORES`.
+- [ ] **Step 3: Generate exact immutable self-contained envelopes in the same transaction**
 
-- [ ] **Step 3: Generate immutable envelopes from the exact newly committed records**
+No secondary idempotency ID. `eventId` is the domain LedgerEvent ID. Every envelope includes Memory + event-specific immutable records.
 
-Use event IDs already generated by Slice 03 domain functions. Do not generate a separate idempotency key.
+- [ ] **Step 4: Replace linear history authority**
 
-- [ ] **Step 4: Update graph-aware history/query**
+Use FactRelations + `orderFactGraphHistory`. Preserve `supersedesFactId` only as compatibility output when a version has exactly one legacy predecessor. Multi-parent resolution has `supersedesFactId:null` and complete `predecessorFactIds`.
 
-Stop using linear `orderTextFactHistory` as the authoritative path. Use `FactRelation` + `orderFactGraphHistory`. If `syncConflicts` is OPEN, `query()` returns contract `CONFLICT` rather than silently returning baseline/candidate content.
+- [ ] **Step 5: Make query conflict-aware**
 
-- [ ] **Step 5: Run local repository tests**
+If current `syncConflicts.status='OPEN'`, return the explicit `CONFLICT` response. Never return baseline/candidate as a normal `FOUND` answer.
+
+- [ ] **Step 6: Verify**
 
 Run: `pnpm exec vitest run apps/web/src/lib/indexeddb/indexeddb-memory-repository.test.ts apps/web/src/lib/memory-repository.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add apps/web/src/lib/memory-repository.ts apps/web/src/lib/indexeddb/indexeddb-memory-repository*
+git add apps/web/src/lib/memory-repository* apps/web/src/lib/indexeddb/indexeddb-memory-repository*
 git commit -m "feat(slice-04): enqueue local memory events atomically"
 ```
 
 ---
 
-### Task 13: Implement `IndexedDbSyncStore` for pending queue, atomic pull, and bootstrap staging/promotion
+### Task 13: Implement IndexedDbSyncStore atomic pull and bootstrap promotion
 
 **Files:**
 - Create: `apps/web/src/lib/indexeddb/indexeddb-sync-store.ts`
@@ -876,30 +962,27 @@ interface SyncLocalStore {
 }
 ```
 
-- [ ] **Step 1: Write RED tests for client identity and push acknowledgements**
+- [ ] **Step 1: Write RED identity/acknowledgement tests**
 
-`clientInstanceId` is UUID v7, stable across reload/open, but a fresh database gets a different ID. `APPLIED`, `ALREADY_APPLIED`, and `CONFLICT` remove/acknowledge the outbound pending record; `DEPENDENCY_MISSING` retains it; `BLOCKED/INVALID` preserve it as BLOCKED.
+`clientInstanceId` is UUID v7, persistent in one DB, different in a new DB. `APPLIED`, `ALREADY_APPLIED`, `CONFLICT` acknowledge/remove pending outbound event. `DEPENDENCY_MISSING` remains PENDING. `BLOCKED/INVALID` becomes BLOCKED with stable code.
 
-- [ ] **Step 2: Write RED test for immutable apply**
+- [ ] **Step 2: Implement immutable add-or-verify**
 
-Applying an already-known same ID/same content is idempotent. Same ID/different immutable content aborts with `LOCAL_DATA_INTEGRITY_ERROR`; never `put()` over immutable canonical content blindly.
+For each canonical record ID/key, existing identical content is idempotent; existing different content aborts with `LOCAL_DATA_INTEGRITY_ERROR`. Never blindly `put()` immutable canonical rows.
 
-- [ ] **Step 3: Write RED atomic pull page test**
+- [ ] **Step 3: Write/implement atomic pull page**
 
-Stage a page with two valid records and one conflicting immutable duplicate. Assert the entire transaction rolls back and confirmed cursor remains unchanged. Then retry an unmodified valid page and assert all records/projections/cursor commit together.
+One readwrite transaction applies all page records, recomputes each touched memory projection, updates CurrentFact/conflict projection, and writes `confirmedCursor=page.nextCursor`. Any record/projection failure aborts everything and cursor stays unchanged.
 
-- [ ] **Step 4: Implement projection rebuild inside the same transaction**
+- [ ] **Step 4: Rebuild projection deterministically**
 
-For each touched memory, read Facts + FactRelations, call `deriveMemoryProjection`, then:
+RESOLVED→exactly one CurrentFact for derived leaf. OPEN CONFLICT→CurrentFact points to baseline as internal baseline projection, `syncConflicts` stores OPEN candidates, and query layer still returns `CONFLICT`. If an existing OPEN conflict becomes resolved, write RESOLVED projection with resolutionFactId; a later new branch may replace it with OPEN.
 
-- RESOLVED => exactly one `currentFacts` row for derived current Fact and no OPEN conflict;
-- CONFLICT => `currentFacts` points to the derived baseline Fact and `syncConflicts` records OPEN candidates; query layer must still expose conflict, not baseline as normal truth.
+- [ ] **Step 5: Implement bootstrap staging and atomic promotion**
 
-- [ ] **Step 5: Implement bootstrap staging/promotion**
+Pages write only `bootstrapStaging`. Promotion transaction merges staged immutable records with existing local canonical rows, never touches local `syncOutbox`, rebuilds all touched projections, writes watermark cursor, and deletes staging rows. Failure rolls back promotion and preserves old state/cursor/pending events.
 
-Pages write only to `bootstrapStaging`. Promotion opens one readwrite transaction over staging + canonical stores + projection/conflict + `syncState`, merges immutable remote records while retaining local pending rows, rebuilds touched projections, writes high-watermark cursor, then clears staging. A failure rolls back promotion and leaves old local state/cursor intact.
-
-- [ ] **Step 6: Run tests**
+- [ ] **Step 6: Verify**
 
 Run: `pnpm exec vitest run apps/web/src/lib/indexeddb/indexeddb-sync-store.test.ts`
 
@@ -914,7 +997,7 @@ git commit -m "feat(slice-04): add local synchronization store"
 
 ---
 
-### Task 14: Implement versioned HTTP client and bounded retry policy
+### Task 14: Implement versioned HTTP client and deterministic bounded retry policy
 
 **Files:**
 - Create: `apps/web/src/lib/sync/sync-api.ts`
@@ -922,31 +1005,27 @@ git commit -m "feat(slice-04): add local synchronization store"
 - Create: `apps/web/src/lib/sync/retry.ts`
 - Create: `apps/web/src/lib/sync/retry.test.ts`
 
-**Interfaces:**
-- `SyncApiClient.startBootstrap`, `readBootstrapPage`, `push`, `pull`.
-- `computeRetryDelay(attempt, random)` and `classifySyncFailure(error)`.
+**Interfaces:** `SyncApiClient.startBootstrap/readBootstrapPage/push/pull`; `computeRetryDelay`; `classifySyncFailure`.
 
-- [ ] **Step 1: Write RED API serialization tests**
+- [ ] **Step 1: Write RED API tests**
 
-Assert protocol version is in every persisted/request envelope, cursor remains string, stable structured server codes map to typed client errors, and unknown response shapes fail closed.
+Every request/response validates protocol v1; cursor remains string; unknown shape fails closed; structured `code` maps to typed error; sync responses are not written to Cache API.
 
-- [ ] **Step 2: Write RED retry tests with deterministic random**
+- [ ] **Step 2: Write RED retry tests with injected `random()`**
 
-Use formula:
+Exact policy:
 
 ```ts
-raw = Math.min(500 * 2 ** attempt, 10_000);
-jitterFactor = 0.8 + random() * 0.4;
-delay = Math.round(raw * jitterFactor);
+const raw = Math.min(500 * 2 ** attempt, 10_000);
+const jitterFactor = 0.8 + random() * 0.4;
+const delayMs = Math.round(raw * jitterFactor);
 ```
 
-Cap automatic attempts per foreground cycle at `5`. Network errors/timeouts/502/503 are transient. Protocol unsupported, integrity, blocked, and accepted conflict are not transient transport retries.
+Maximum automatic retry attempts per foreground cycle: `5`. Network errors/timeouts/502/503 are transient. Protocol/integrity/blocked and accepted conflict are not transport retries.
 
-- [ ] **Step 3: Implement `SyncApiClient` with injected `fetch`**
+- [ ] **Step 3: Implement injected-fetch client and retry functions**
 
-Never cache sync API responses in Service Worker or browser Cache API.
-
-- [ ] **Step 4: Run tests**
+- [ ] **Step 4: Verify**
 
 Run: `pnpm exec vitest run apps/web/src/lib/sync/sync-api.test.ts apps/web/src/lib/sync/retry.test.ts`
 
@@ -961,7 +1040,7 @@ git commit -m "feat(slice-04): add sync transport and retry policy"
 
 ---
 
-### Task 15: Implement single-flight `SyncEngine` bootstrap/push/pull convergence loop
+### Task 15: Implement single-flight SyncEngine convergence loop
 
 **Files:**
 - Create: `apps/web/src/lib/sync/sync-engine.ts`
@@ -976,31 +1055,23 @@ class SyncEngine {
 }
 ```
 
-- [ ] **Step 1: Write RED orchestration tests with fake API/local store**
+- [ ] **Step 1: Write RED orchestration tests using fake API/local store**
 
-Prove:
-
-- no network when offline;
-- no confirmed cursor => bootstrap all pages, promote, then push/pull;
-- normal cycle => push pending batch, acknowledge accepted results, pull until `hasMore=false`, repeat if dependency recovery created work;
-- `DEPENDENCY_MISSING` triggers pull/dependency recovery before retry same event ID;
-- `CURSOR_EXPIRED` triggers safe rebootstrap while pending local work remains;
-- concurrent `synchronize()` calls share one in-flight promise;
-- transient failure performs bounded retries; permanent failure stops.
+No network offline; no cursor→complete bootstrap then push/pull; normal push then pull until `hasMore=false`; dependency missing→pull then retry same event ID; cursor expired→rebootstrap preserving pending; simultaneous synchronize calls share one in-flight promise; transient retry bounded; permanent stop.
 
 - [ ] **Step 2: Implement bootstrap loop**
 
-Use server-provided `bootstrapToken` and page offsets. If any page fails, keep staging isolated and do not confirm high-watermark. On token expiration, discard only that staging token and restart bootstrap.
+Stage every page by token. Confirm watermark only through `promoteBootstrap`. On `SYNC_BOOTSTRAP_EXPIRED`, discard only that token staging and restart bootstrap.
 
 - [ ] **Step 3: Implement push/pull loop**
 
-Never mark an event synced merely because request transmission succeeded; consume explicit result status. `CONFLICT` acknowledges the outbound event and leaves conflict UI state.
+Send at most configured batch limit. Apply explicit results before pull. Accepted conflict is acknowledged. Pull pages commit atomically through local store. Repeat only while there is known productive work; cap dependency/retry loops to prevent infinite foreground spin.
 
-- [ ] **Step 4: Implement foreground triggers without Background Sync dependency**
+- [ ] **Step 4: Keep triggers foreground-only**
 
-The engine exposes methods; React integration in next task wires startup, `online`, pending, and manual triggers. No Service Worker Background Sync registration.
+Expose engine methods; React wiring handles startup, `online`, pending, and manual. Do not register Background Sync.
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 5: Verify**
 
 Run: `pnpm exec vitest run apps/web/src/lib/sync/sync-engine.test.ts`
 
@@ -1015,7 +1086,7 @@ git commit -m "feat(slice-04): implement synchronization engine"
 
 ---
 
-### Task 16: Integrate sync state and explicit conflict resolution into React UI
+### Task 16: Integrate global/per-memory sync state and conflict resolution UI
 
 **Files:**
 - Create: `apps/web/src/lib/sync/use-sync-state.ts`
@@ -1028,34 +1099,25 @@ git commit -m "feat(slice-04): implement synchronization engine"
 - Modify: `apps/web/src/features/memory/StoreMemoryForm.tsx`, test
 - Modify: `apps/web/src/features/memory/MemoryFoundResult.tsx`, test
 
-**Interfaces:**
-- Global states: `OFFLINE | SYNCED | PENDING | SYNCING | CONFLICT | ERROR`.
-- Per-memory states: `LOCAL_PENDING | SYNCING | SYNCED | CONFLICT | BLOCKED`.
+**Interfaces:** Global `OFFLINE | SYNCED | PENDING | SYNCING | CONFLICT | ERROR`; per-memory `LOCAL_PENDING | SYNCING | SYNCED | CONFLICT | BLOCKED`.
 
-- [ ] **Step 1: Write RED component tests for truthful state**
+- [ ] **Step 1: Write RED UI tests**
 
-Assertions:
+Offline save states local persistence only; pending/syncing/synced states are distinct; manual button invokes engine; conflict shows baseline plus every candidate; resolution always calls local `resolveConflict()` and creates a new fact.
 
-- offline save says local save, not remote synchronization;
-- `PENDING` shows pending count/status;
-- `SYNCING` shows progress without blocking local forms;
-- `CONFLICT` shows baseline and every candidate;
-- `Synchronize now` invokes manual engine trigger;
-- conflict resolution can choose candidate text or enter a new value, but always calls `resolveConflict()` and creates a new fact.
+- [ ] **Step 2: Wire one engine at app boundary**
 
-- [ ] **Step 2: Wire one `SyncEngine` instance at app boundary**
+Subscribe on mount, trigger startup if online, listen to browser `online`, and trigger when new pending work appears. Memory form submit never calls remote memory/sync API directly.
 
-On app mount, subscribe and call startup sync when online. Listen to browser `online` events. Do not couple memory form submit directly to remote API.
+- [ ] **Step 3: Use truthful copy**
 
-- [ ] **Step 3: Update success copy**
+Local success: `Salva neste dispositivo.` Sync projection alone may display `Sincronizada` after remote acknowledgement.
 
-After local create/correct, use copy equivalent to `Salva neste dispositivo.` plus sync status component. Only the sync projection may say `Sincronizada` after remote acknowledgement.
+- [ ] **Step 4: Render conflict branch**
 
-- [ ] **Step 4: Render conflict response instead of normal found answer**
+`MemoryFoundResult` on `status==='CONFLICT'` never renders baseline/candidate as a normal resolved answer.
 
-`MemoryFoundResult` branches on `status === 'CONFLICT'`. It must not display baseline/candidate as a normal resolved answer.
-
-- [ ] **Step 5: Run UI tests**
+- [ ] **Step 5: Verify**
 
 Run: `pnpm exec vitest run apps/web/src/App.test.tsx apps/web/src/features/memory apps/web/src/features/sync apps/web/src/lib/sync/use-sync-state.test.ts`
 
@@ -1070,44 +1132,27 @@ git commit -m "feat(slice-04): surface synchronization and conflict state"
 
 ---
 
-### Task 17: Add Slice 04 architecture guards and physical schema guards
+### Task 17: Add architecture and physical schema guards
 
 **Files:**
 - Create: `tests/architecture/slice-04-scope.test.ts`
 - Modify: `.github/workflows/ci.yml`
 
-**Interfaces:**
-- Architecture test enforces boundary/non-goals.
-- CI validates actual PostgreSQL Slice 04 schema before application tests.
-
 - [ ] **Step 1: Write RED architecture guard**
 
-Scan production sources/package metadata and fail if Slice 04 introduces `bullmq`, Redis client packages, WebSocket server/client infrastructure, `SyncManager`/mandatory Background Sync, `MEMORY_DELETED`, purge endpoints, or server-wins/last-write-wins implementation switches.
+Fail if production/package sources introduce Redis client/BullMQ, WebSocket sync infrastructure, mandatory `SyncManager` Background Sync, `MEMORY_DELETED`, purge/remote-wipe endpoints, last-write-wins/server-wins switches, or active UI dual-write to `memory-api`.
 
-Also assert active PWA memory writes still target `MemoryRepository` rather than direct `memory-api` dual write.
-
-- [ ] **Step 2: Update CI exact table assertion**
-
-Expected public tables (excluding `_prisma_migrations`) become exactly:
+- [ ] **Step 2: Replace exact table assertion with Slice 04 exact list**
 
 ```text
 current_facts,evidence,fact_relations,facts,ledger_events,memories,sync_bootstrap_snapshots,sync_conflicts,sync_feed_state,sync_outbox
 ```
 
-If Prisma naming differs, use the exact final migration names and keep the assertion deterministic.
+- [ ] **Step 3: Add exact physical schema assertions**
 
-- [ ] **Step 3: Add physical schema assertions**
+Require old facts unique index count `0`; `fact_relations` PK/FKs/checks; `sync_outbox.event_id` unique; `sync_outbox.sequence` BIGINT primary key with no default; singleton feed row exists; bootstrap records JSONB/expiry index; conflict status check exists; conflict-resolved LedgerEvent check exists.
 
-Require:
-
-- legacy `facts.supersedes_fact_id` UUID column may remain but is not unique;
-- composite PK/FKs on `fact_relations`;
-- `sync_outbox.event_id` unique;
-- `sync_outbox.sequence` BIGINT PK without sequence/autoincrement default;
-- singleton `sync_feed_state(id=1,current_sequence=0+)` exists;
-- bootstrap/outbox JSONB and expiry/indexes exist.
-
-- [ ] **Step 4: Run architecture + formatting**
+- [ ] **Step 4: Verify architecture/lint/format**
 
 Run: `pnpm exec vitest run tests/architecture/slice-04-scope.test.ts && pnpm lint && pnpm format:check`
 
@@ -1122,19 +1167,13 @@ git commit -m "test(slice-04): guard synchronization architecture"
 
 ---
 
-### Task 18: Add core synchronization E2E scenarios
+### Task 18: Add core synchronization E2E
 
 **Files:**
 - Create: `tests/e2e/synchronization-core.spec.ts`
 - Modify: `playwright.config.ts`
 
-**Interfaces:**
-- Use separate Playwright browser contexts to represent separate installations/IndexedDB databases.
-- E2E runtime remains synthetic.
-
-- [ ] **Step 1: Configure deterministic E2E operational limits**
-
-Add API webServer env values, e.g.:
+- [ ] **Step 1: Set deterministic synthetic E2E API config**
 
 ```ts
 SYNC_MAX_BATCH_SIZE: '4',
@@ -1142,25 +1181,23 @@ SYNC_OUTBOX_MAX_ENTRIES: '8',
 SYNC_BOOTSTRAP_TTL_SECONDS: '30',
 ```
 
-Keep these as test configuration only.
+- [ ] **Step 2: E2E — offline create/correct → online convergence**
 
-- [ ] **Step 2: Implement E2E 1 — offline create/correct → online convergence**
+Set browser context offline; create/correct; restore online; sync; verify server history and local history retain identical definitive IDs/content.
 
-Use `context.setOffline(true)`, create/correct locally, restore online, click/wait for sync, then verify server history through API and local query/history contain identical definitive IDs/content.
+- [ ] **Step 3: E2E — server commits, response lost, retry same event**
 
-- [ ] **Step 3: Implement E2E 2 — lost response + idempotent retry**
+Intercept first push, call `route.fetch()` so real server commits, then abort response to page. Retry must reuse event ID and server must contain one logical effect.
 
-Intercept first push with `route.fetch()` so the real server commits, then abort/throw the response to the page. Retry must send the same event ID and end synchronized with exactly one server LedgerEvent/Fact effect.
+- [ ] **Step 4: E2E — device A create → device B bootstrap/pull**
 
-- [ ] **Step 4: Implement E2E 3 — device A create → device B bootstrap/pull**
+Two browser contexts; same memory/evidence/fact IDs on A, B, server.
 
-Use two contexts. Assert the same memory/evidence/fact UUIDs appear on both; no remapping.
+- [ ] **Step 5: E2E — dependent event arrives before predecessor**
 
-- [ ] **Step 5: Implement E2E 6 — dependency arrives out of order**
+Intercept/reorder push batch so dependent event is processed first; observe `DEPENDENCY_MISSING`, then predecessor accepted, then same dependent event ID succeeds.
 
-Network-route the push payload to send dependent event first, verify `DEPENDENCY_MISSING`, then allow predecessor and retry; convergence succeeds.
-
-- [ ] **Step 6: Run focused E2E**
+- [ ] **Step 6: Verify**
 
 Run: `pnpm exec playwright test tests/e2e/synchronization-core.spec.ts --project=chromium`
 
@@ -1175,31 +1212,28 @@ git commit -m "test(slice-04): cover core synchronization flows"
 
 ---
 
-### Task 19: Add conflict and human-resolution E2E scenarios
+### Task 19: Add conflict/resolution E2E
 
 **Files:**
 - Create: `tests/e2e/synchronization-conflicts.spec.ts`
 
-**Interfaces:**
-- Covers required E2E scenarios 4, 5, and 8.
+- [ ] **Step 1: Concurrent correction conflict**
 
-- [ ] **Step 1: Implement concurrent correction branch test**
+Two devices bootstrap Fact A, go offline, produce B/C, reconnect. Assert B/C both durable, OPEN conflict, baseline A not shown as normal truth, no timestamp winner.
 
-Bootstrap two contexts from Fact A, take both offline, correct independently to B/C, reconnect and sync. Assert server and both clients preserve B and C, conflict is OPEN, baseline A is not shown as normal resolved answer, and neither timestamp decides a winner.
+- [ ] **Step 2: Human resolution**
 
-- [ ] **Step 2: Implement explicit resolution test**
+Resolve B/C to new D. Assert D UUID differs from B/C even if text equals a candidate, relations B→D/C→D exist, all replicas converge, B/C remain in history.
 
-Resolve B/C to new Fact D. Assert D has a new UUID even if its text equals B or C, relations `B→D` and `C→D` exist, all replicas converge to D, and B/C remain in history.
+- [ ] **Step 3: Bootstrap meets local pending branch**
 
-- [ ] **Step 3: Implement bootstrap-with-local-pending-conflict test**
+Server A→B; new client has local pending A→C before first bootstrap. Promotion preserves both and opens conflict; no overwrite.
 
-Server has `A→B`; a separate client locally has pending `A→C` before first server bootstrap. Promotion preserves both and opens the same conflict; no server-wins/local-wins overwrite.
+- [ ] **Step 4: Concurrent resolution recursively conflicts**
 
-- [ ] **Step 4: Add concurrent-resolution recursive conflict test**
+Two devices independently resolve B/C to D/E before syncing. Assert new OPEN conflict candidates D/E with dominator baseline A; neither resolution auto-wins.
 
-Two devices resolve B/C independently to D/E before syncing. Assert D/E become candidates of a new conflict with deepest common dominator A and neither resolution wins automatically.
-
-- [ ] **Step 5: Run focused E2E**
+- [ ] **Step 5: Verify**
 
 Run: `pnpm exec playwright test tests/e2e/synchronization-conflicts.spec.ts --project=chromium`
 
@@ -1214,35 +1248,32 @@ git commit -m "test(slice-04): prove conflict preservation and resolution"
 
 ---
 
-### Task 20: Add bootstrap, cursor-expiry, atomic-failure, and protocol-rejection E2E
+### Task 20: Add bootstrap/cursor/failure/protocol recovery E2E
 
 **Files:**
 - Create: `tests/e2e/synchronization-recovery.spec.ts`
 
-**Interfaces:**
-- Covers required E2E scenarios 7, 9, 10, 11, 12.
+- [ ] **Step 1: New device fixed bootstrap then incremental pull**
 
-- [ ] **Step 1: New-device fixed bootstrap then incremental pull**
+Seed server with synthetic history using existing API; fresh context bootstraps; later server change arrives through pull after captured watermark.
 
-Seed server via existing API, open fresh context, complete bootstrap, then make another server change and prove it arrives via `pull` after the bootstrap high-watermark rather than requiring a second bootstrap.
+- [ ] **Step 2: Cursor expires after pruning**
 
-- [ ] **Step 2: Cursor expiration after Outbox retention**
-
-Allow a device to confirm an old cursor, generate more than `SYNC_OUTBOX_MAX_ENTRIES` server events, then reconnect. Assert `CURSOR_EXPIRED` causes rebootstrap and a separate local pending event survives/pushes afterward.
+Device confirms old cursor; generate more than 8 Outbox events; reconnect. `SYNC_CURSOR_EXPIRED` causes rebootstrap. A separate local pending event survives and subsequently pushes.
 
 - [ ] **Step 3: Pull page local failure keeps cursor unchanged**
 
-Intercept one pull response and mutate one immutable record to conflict with an existing same ID/different content. Local application must fail atomically; inspect `syncState` to prove cursor unchanged. Remove interception and retry the authentic page successfully.
+Intercept pull response and mutate one immutable same-ID record to different content. Atomic apply fails and cursor stays unchanged. Remove intercept, manual retry authentic page, success.
 
-- [ ] **Step 4: Bootstrap failure mid-pagination keeps staging invisible**
+- [ ] **Step 4: Bootstrap failure mid-pagination remains invisible**
 
-Abort a later bootstrap page after earlier pages were staged. Verify remote partial records are not query-visible as synchronized canonical state, local data remains usable, and a subsequent bootstrap succeeds.
+Abort later bootstrap page after earlier staging. Partial remote records remain staging-only; existing local state usable; new bootstrap succeeds.
 
-- [ ] **Step 5: Unsupported protocol version preserves pending work**
+- [ ] **Step 5: Unsupported protocol preserves pending/cursor**
 
-Intercept the client push request, forward a copy with `protocolVersion: 999` to the real API, return the real structured rejection to the client, and assert pending local event remains and cursor does not advance. Remove interception and prove normal v1 sync succeeds.
+Intercept client push, forward modified request with `protocolVersion:999` to real API, relay real rejection. Pending remains, cursor unchanged. Remove intercept and v1 sync succeeds.
 
-- [ ] **Step 6: Run focused E2E**
+- [ ] **Step 6: Verify**
 
 Run: `pnpm exec playwright test tests/e2e/synchronization-recovery.spec.ts --project=chromium`
 
@@ -1257,17 +1288,13 @@ git commit -m "test(slice-04): prove synchronization recovery semantics"
 
 ---
 
-### Task 21: Run complete regression, failure proofs, and CI-equivalent validation
+### Task 21: Run full regression, real PostgreSQL outage proof, and invariant mapping
 
 **Files:**
-- Modify only if a failing legitimate regression requires a scoped Slice 04 fix.
+- Create: `artifacts/phases/SLICE-04-SYNCHRONIZATION/PHASE-04-INVARIANTS.yaml`
+- Modify implementation files only if a legitimate scoped regression requires a fix.
 
-**Interfaces:**
-- No new product behavior. This is the pre-evidence technical qualification task.
-
-- [ ] **Step 1: Clean real database and reapply all migrations**
-
-Run:
+- [ ] **Step 1: Clean DB and validate full migration chain**
 
 ```bash
 docker compose down -v
@@ -1278,11 +1305,9 @@ pnpm prisma:generate
 pnpm db:migrate
 ```
 
-Expected: all migrations succeed from empty DB.
+Expected: PASS from empty PostgreSQL.
 
-- [ ] **Step 2: Run static/unit/integration gates**
-
-Run:
+- [ ] **Step 2: Static/unit/integration/build gates**
 
 ```bash
 pnpm typecheck
@@ -1295,32 +1320,49 @@ pnpm verify:pwa
 
 Expected: PASS.
 
-- [ ] **Step 3: Run both E2E commands**
-
-Run:
+- [ ] **Step 3: Browser gates**
 
 ```bash
 pnpm e2e
 pnpm e2e:offline
 ```
 
-Expected: standard E2E includes Slice 01–04 browser scenarios; isolated offline suite still proves Slice 03 with no API dependency.
+Expected: standard suite covers Slices 01–04; isolated offline suite remains Slice 03-only and API-independent.
 
-- [ ] **Step 4: Re-run real PostgreSQL outage proof and add sync outage assertion**
+- [ ] **Step 4: Extend real PostgreSQL outage proof to sync**
 
-With API healthy first, stop PostgreSQL and verify `/health/live=200`, `/health/ready=503`, existing memory mutation returns safe `503`, and `/sync/v1/push` returns safe structured `503` without payload text/SQL leakage. Restart PostgreSQL and prove pending client work subsequently synchronizes without ID change.
+Start healthy API; prove live=200/ready=200. Stop PostgreSQL; prove live=200/ready=503; existing memory mutation and `/sync/v1/push` return safe structured 503 with `SYNC_SERVICE_UNAVAILABLE`/existing safe envelope as appropriate; response contains no synthetic memory content and no SQL text. Restart DB; same local pending UUID synchronizes successfully.
 
-- [ ] **Step 5: Verify acceptance invariants I1–I15 explicitly**
+- [ ] **Step 5: Write exact invariant mapping YAML**
 
-Create a short machine-readable or test-linked checklist mapping each invariant in the spec to at least one passing automated/E2E/integration proof. Any unmapped invariant blocks evidence finalization.
+Structure:
 
-- [ ] **Step 6: Commit only scoped fixes if needed**
+```yaml
+slice: 4
+invariants:
+  I1:
+    statement: no silent overwrite
+    proofs:
+      - tests/e2e/synchronization-conflicts.spec.ts
+  I2:
+    statement: original Evidence is never destroyed by synchronization
+    proofs:
+      - apps/api/src/infrastructure/persistence/prisma/prisma-sync.store.integration.test.ts
+      - tests/e2e/synchronization-conflicts.spec.ts
+```
 
-If no fixes were needed, do not create an empty commit.
+Continue explicitly through I15 from the approved spec. Every invariant must have at least one concrete automated proof path; no generic “covered by tests” entry.
+
+- [ ] **Step 6: Commit invariant map with any scoped qualification fixes**
+
+```bash
+git add artifacts/phases/SLICE-04-SYNCHRONIZATION/PHASE-04-INVARIANTS.yaml
+git commit -m "test(slice-04): map synchronization acceptance invariants"
+```
 
 ---
 
-### Task 22: Produce Slice 04 evidence package and checkpoint without claiming unavailable gates
+### Task 22: Freeze evidence/checkpoint/review package
 
 **Files:**
 - Create: `docs/evidence/slice-04/SLICE-04-EVIDENCE-001.md`
@@ -1335,36 +1377,33 @@ If no fixes were needed, do not create an empty commit.
 - Create: `artifacts/phases/SLICE-04-SYNCHRONIZATION/PHASE-04-VALIDATION-FULL.txt`
 - Create: `artifacts/phases/SLICE-04-SYNCHRONIZATION/PHASE-04-SMOKE.txt`
 - Create: `artifacts/phases/SLICE-04-SYNCHRONIZATION/PHASE-04-CHECKPOINT.yaml`
+- Existing from Task 21: `PHASE-04-INVARIANTS.yaml`
 - Create: `artifacts/phases/SLICE-04-SYNCHRONIZATION/PHASE-04-ARTIFACT-MANIFEST.sha256`
-- Modify: `.github/workflows/ci.yml` only to verify the frozen Slice 04 manifest after it exists.
+- Modify: `.github/workflows/ci.yml` to verify frozen Slice 04 manifest.
 
-**Interfaces:**
-- Evidence must cite exact branch HEAD, exact workflow run/job IDs, exact test counts, E2E counts, schema proof, outage proof, and invariants.
+- [ ] **Step 1: Capture actual observed outputs only**
 
-- [ ] **Step 1: Capture immutable validation output**
+Evidence records exact candidate HEAD, actual test file/test counts, E2E counts, migration/schema proof, outage proof, invariant map, workflow run/job IDs. Never copy planned counts as observed facts.
 
-Record exact commands and outputs from Task 21. Do not copy planned counts; use actual observed results.
+- [ ] **Step 2: Write review truthfully**
 
-- [ ] **Step 2: Write review with explicit gate truth**
+MESTRE review severity findings are explicit. If Emily/LÉO gates are unavailable, record `NOT PERFORMED / NOT CLAIMED`; do not simulate them.
 
-Record MESTRE review findings by severity. If Emily/LÉO independent gates are unavailable, write `NOT PERFORMED / NOT CLAIMED`; do not simulate them.
-
-- [ ] **Step 3: Build SHA-256 manifest after evidence files are frozen**
-
-From the artifact directory:
+- [ ] **Step 3: Freeze artifact manifest**
 
 ```bash
-sha256sum README.md PHASE-04-PLAN.md PHASE-04-REPORT.md PHASE-04-DECISIONS.md PHASE-04-VALIDATION.txt PHASE-04-VALIDATION-FULL.txt PHASE-04-SMOKE.txt PHASE-04-CHECKPOINT.yaml > PHASE-04-ARTIFACT-MANIFEST.sha256
+cd artifacts/phases/SLICE-04-SYNCHRONIZATION
+sha256sum README.md PHASE-04-PLAN.md PHASE-04-REPORT.md PHASE-04-DECISIONS.md PHASE-04-VALIDATION.txt PHASE-04-VALIDATION-FULL.txt PHASE-04-SMOKE.txt PHASE-04-CHECKPOINT.yaml PHASE-04-INVARIANTS.yaml > PHASE-04-ARTIFACT-MANIFEST.sha256
 sha256sum -c PHASE-04-ARTIFACT-MANIFEST.sha256
 ```
 
-Expected: every entry `OK`.
+Expected: all entries `OK`.
 
-- [ ] **Step 4: Add manifest verification to CI and rerun complete CI**
+- [ ] **Step 4: Add CI manifest verification and run complete qualifying CI on exact candidate HEAD**
 
-Do not edit the frozen manifest contents after the qualifying CI without creating a clearly newer evidence revision.
+Do not alter frozen evidence after the qualifying run without producing an explicit newer evidence revision.
 
-- [ ] **Step 5: Commit evidence**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add docs/evidence/slice-04 docs/checkpoints/MDP-SLICE-04-CHECKPOINT-001.md docs/phases/SLICE-04.md docs/superpowers/specs/2026-08-18-slice-04-synchronization-review.md artifacts/phases/SLICE-04-SYNCHRONIZATION .github/workflows/ci.yml
@@ -1373,31 +1412,22 @@ git commit -m "docs(slice-04): freeze synchronization evidence"
 
 ---
 
-### Task 23: Prepare the HUMAN_GATE for merge; do not merge automatically
+### Task 23: Prepare HUMAN_GATE; do not merge automatically
 
-**Files:**
-- No implementation changes.
-- `docs/STATE.md` must not claim Slice 04 merged before the authorized merge actually occurs.
+**Files:** No product changes. `docs/STATE.md` must not claim Slice 04 merged before an authorized merge actually occurs.
 
-**Interfaces:**
-- Produces a factual gate packet for LEANDRO.
-
-- [ ] **Step 1: Confirm branch is based on the expected main lineage and has no unrelated changes**
-
-Run equivalent of:
+- [ ] **Step 1: Verify branch scope and lineage**
 
 ```bash
 git diff --stat main...HEAD
 git log --oneline main..HEAD
 ```
 
-- [ ] **Step 2: Confirm latest qualifying CI is green on exact candidate HEAD**
+- [ ] **Step 2: Verify latest qualifying CI is green on exact candidate HEAD**
 
-Record workflow run ID/job ID/SHA.
+Record exact workflow run ID, job ID, and SHA in gate packet.
 
-- [ ] **Step 3: Present merge gate with explicit recommendation**
-
-Use MCF format and mark recommendation:
+- [ ] **Step 3: Present explicit MCF merge gate with recommendation marked**
 
 ```text
 ✅ A — AUTORIZAR MERGE SLICE 04 — RECOMENDADA PELO MESTRE
@@ -1406,35 +1436,31 @@ Use MCF format and mark recommendation:
 
 - [ ] **Step 4: Stop**
 
-Do not merge, do not start Slice 05 implementation, and do not infer authorization from a bare continuation message unless it is answering this explicit HUMAN_GATE.
+Do not merge, do not start Slice 05 implementation, and do not interpret unrelated/bare continuation as merge authorization unless it directly answers this explicit gate.
 
 ---
 
-## Plan Self-Review Checklist
+## Self-Review Coverage Map
 
-Before requesting implementation authorization, verify this plan against the written spec:
+- Governance/authorization: Global Constraints, Task 23.
+- Local-first + bidirectional event sync: Tasks 1, 12–16.
+- Fact DAG / conflict baseline / resolution: Tasks 2–5, 7, 12–13, 19.
+- Protocol versioning/client installation ID: Tasks 1, 11, 13–15, 20.
+- Bootstrap/push/pull/idempotency/dependency: Tasks 7–10, 13–15.
+- Transactional Outbox/commit-order cursor/retention: Tasks 4–9.
+- IndexedDB v3/local atomicity: Tasks 11–13.
+- Retry/status/pagination: Tasks 8–10, 13–16.
+- Security/deletion/infrastructure boundaries: Global Constraints + Task 17.
+- Stable error model: Tasks 1, 7–10, 14.
+- All 12 required E2E scenarios: Tasks 18–20.
+- Acceptance invariants I1–I15: Task 21 exact YAML mapping.
+- DoD/regression/evidence/CI/HUMAN_GATE: Tasks 21–23.
+- No later-slice capability is introduced.
 
-- Spec §1 governance: implementation/merge/real data/pilot gates preserved — covered by Global Constraints and Task 23.
-- §§2–6 objective/local-first/bidirectional/event unit — Tasks 1, 12–16.
-- §§7–8 Fact DAG/conflict/current projection — Tasks 2–3, 4, 7, 12–13, 19.
-- §9 protocol versioning — Tasks 1, 10, 14, 20.
-- §10 client instance — Tasks 11, 13.
-- §§11–13 bootstrap/push/pull/idempotency/dependencies — Tasks 7–10, 13–15.
-- §§14–15 Transactional Outbox/retention — Tasks 4–9.
-- §§16–17 IndexedDB v3/local atomicity — Tasks 11–13.
-- §§18–21 SyncEngine/retry/UI/pagination — Tasks 14–16, 18–20.
-- §§22–24 security/deletion/infrastructure boundaries — Global Constraints + Task 17.
-- §25 stable error model — Tasks 1, 7–10, 14.
-- §26 test strategy and 12 required E2E scenarios — Tasks 18–21.
-- §27 invariants I1–I15 — Task 21 mapping.
-- §28 DoD/regression/evidence — Tasks 21–23.
-- §29 later-slice non-goals — Global Constraints + architecture guard.
-- §30 all 30 approved decisions — represented by tasks above; no alternate server-wins/LWW/background-worker path introduced.
-
-No `TBD`, `TODO`, “implement later”, unspecified validation step, or automatic merge instruction is permitted in the executable plan.
+Self-review result: no `TBD`, `TODO`, omitted SQL column list, unspecified table name, automatic merge action, or implicit implementation authorization remains in this plan.
 
 ## Execution Handoff
 
-This plan is complete only as a planning artifact. **Implementation remains blocked until LEANDRO gives the explicit Slice 04 implementation authorization required by governance.**
+This is a planning artifact only. **Slice 04 implementation remains NOT AUTHORIZED until LEANDRO explicitly authorizes implementation.**
 
-After that gate, preferred execution is **Subagent-Driven Development** if the runtime provides independent subagents; otherwise use **Inline Execution** with `superpowers:executing-plans`, task-by-task checkpoints, without pretending unavailable subagent/Emily/LÉO gates were executed.
+If implementation is authorized in this runtime, the available path is inline task-by-task execution using `superpowers:executing-plans`; independent subagent execution must only be claimed if an actual subagent runtime is available. Unavailable Emily/LÉO/subagent gates must never be retroactively claimed.
