@@ -1,0 +1,13 @@
+SLICE-03 SMOKE
+PASS app opens with local repository ready
+PASS PWA manifest/service worker build verification
+PASS offline app-shell reopen
+PASS create local memory
+PASS current-only query
+PASS correction with expectedCurrentFactId
+PASS explicit root-to-tip history
+PASS append-only restore
+PASS multi-tab stale rejection
+PASS IndexedDB v1→v2 preservation
+PASS local storage fail-safe
+PASS no API memory request in isolated offline E2E

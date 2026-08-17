@@ -1,0 +1,14 @@
+SLICE-03 VALIDATION
+status=PASS
+automated_suite=PASS
+legacy_e2e=3/3
+offline_e2e=5/5
+pwa_build_verification=PASS
+indexeddb_v1_to_v2_migration=PASS
+multi_tab_stale_write=PASS
+local_storage_fail_safe=PASS
+postgresql_five_table_regression=PASS
+postgresql_outage_safe_503=PASS
+real_sensitive_data=NOT_AUTHORIZED
+pilot=NOT_AUTHORIZED
+merge=NOT_AUTHORIZED

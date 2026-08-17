@@ -1,0 +1,48 @@
+mission_id: MDP-001
+phase_id: SLICE-03
+title: Local PWA + Offline
+risk_class: B
+state: READY_FOR_GOVERNANCE
+phase_complete: false
+technical_validation:
+  status: PASS
+  validated_branch_head: 14bb9792c3a1186332c1b74ba3f39b7dae4907e6
+  ci_run: 32023403748
+  ci_job: 95367614875
+  automated_suite: PASS
+  legacy_e2e:
+    passed: 3
+    total: 3
+  offline_e2e:
+    passed: 5
+    total: 5
+  pwa_build_verification: PASS
+  indexeddb_v1_to_v2_migration: PASS
+  multi_tab_stale_write: PASS
+  local_storage_fail_safe: PASS
+  physical_postgresql_schema_regression: PASS
+  postgresql_outage_safe_503: PASS
+pull_request:
+  number: 6
+  state: OPEN_DRAFT
+  merged: false
+gates:
+  independent_emily_audit:
+    status: NOT_PERFORMED
+    claimed: false
+  leo_internal_gate:
+    status: NOT_PERFORMED
+    claimed: false
+  mestre_structured_review:
+    status: PASS
+    independent: false
+  human_gate:
+    authority: LEANDRO
+    decision: PENDING
+merge_authorized: false
+merge_executed: false
+post_merge_validation: PENDING
+real_sensitive_data_authorized: false
+pilot_authorized: false
+slice04_authorized: false
+human_action_required: true
