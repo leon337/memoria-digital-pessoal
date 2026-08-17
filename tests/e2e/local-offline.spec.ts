@@ -19,15 +19,15 @@ async function primeServiceWorker(page: Page): Promise<void> {
 }
 
 async function createMemory(page: Page, text: string): Promise<void> {
-  await page.getByLabel('Lembrança').fill(text);
+  await page.getByLabel('Lembrança', { exact: true }).fill(text);
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByText('Lembrança guardada.')).toBeVisible();
 }
 
 async function queryMemory(page: Page, query: string, answer: string): Promise<void> {
-  await page.getByLabel('Palavra ou frase').fill(query);
+  await page.getByLabel('Palavra ou frase', { exact: true }).fill(query);
   await page.getByRole('button', { name: 'Consultar' }).click();
-  await expect(page.getByText(answer)).toBeVisible();
+  await expect(page.getByText(answer, { exact: true })).toBeVisible();
 }
 
 async function seedVersionOneDatabase(page: Page): Promise<void> {
@@ -116,15 +116,17 @@ test('reopens offline and completes create/query/correct/history/restore without
   const offlinePage = await context.newPage();
   await offlinePage.goto('/');
   await waitLocalReady(offlinePage);
-  await expect(offlinePage.getByText('Offline')).toBeVisible();
+  await expect(offlinePage.getByText('Offline', { exact: true })).toBeVisible();
 
   await queryMemory(offlinePage, 'Ana', 'Minha irmã se chama Ana.');
   await offlinePage.getByRole('button', { name: 'Corrigir' }).click();
-  await offlinePage.getByLabel('Texto corrigido').fill('Minha irmã se chama Beatriz.');
+  await offlinePage
+    .getByLabel('Texto corrigido', { exact: true })
+    .fill('Minha irmã se chama Beatriz.');
   await offlinePage.getByRole('button', { name: 'Salvar correção' }).click();
-  await expect(offlinePage.getByText('Correção salva.')).toBeVisible();
+  await expect(offlinePage.getByText('Correção salva.', { exact: true })).toBeVisible();
 
-  await offlinePage.getByLabel('Palavra ou frase').fill('Ana');
+  await offlinePage.getByLabel('Palavra ou frase', { exact: true }).fill('Ana');
   await offlinePage.getByRole('button', { name: 'Consultar' }).click();
   await expect(
     offlinePage.getByText('Não encontrei uma lembrança registrada que corresponda a essa busca.'),
@@ -141,7 +143,7 @@ test('reopens offline and completes create/query/correct/history/restore without
 
   await versions.nth(0).getByRole('button', { name: 'Usar este texto como nova correção' }).click();
   await offlinePage.getByRole('button', { name: 'Salvar correção' }).click();
-  await expect(offlinePage.getByText('Minha irmã se chama Ana.')).toBeVisible();
+  await expect(offlinePage.getByText('Minha irmã se chama Ana.', { exact: true })).toBeVisible();
 
   await offlinePage.getByRole('button', { name: 'Ver histórico' }).click();
   versions = offlinePage
@@ -151,7 +153,7 @@ test('reopens offline and completes create/query/correct/history/restore without
 
   await offlinePage.reload();
   await waitLocalReady(offlinePage);
-  await expect(offlinePage.getByText('Offline')).toBeVisible();
+  await expect(offlinePage.getByText('Offline', { exact: true })).toBeVisible();
   await queryMemory(offlinePage, 'Ana', 'Minha irmã se chama Ana.');
   await offlinePage.getByRole('button', { name: 'Ver histórico' }).click();
   await expect(
@@ -177,11 +179,11 @@ test('same-base corrections across two tabs yield one success and one stale reje
 
   await page.getByRole('button', { name: 'Corrigir' }).click();
   await second.getByRole('button', { name: 'Corrigir' }).click();
-  await page.getByLabel('Texto corrigido').fill('Correção concorrente A.');
-  await second.getByLabel('Texto corrigido').fill('Correção concorrente B.');
+  await page.getByLabel('Texto corrigido', { exact: true }).fill('Correção concorrente A.');
+  await second.getByLabel('Texto corrigido', { exact: true }).fill('Correção concorrente B.');
 
   await page.getByRole('button', { name: 'Salvar correção' }).click();
-  await expect(page.getByText('Correção salva.')).toBeVisible();
+  await expect(page.getByText('Correção salva.', { exact: true })).toBeVisible();
   await second.getByRole('button', { name: 'Salvar correção' }).click();
   await expect(second.getByRole('alert')).toContainText('A lembrança mudou');
 });
@@ -197,12 +199,14 @@ test('local storage failure never reports a successful memory write', async ({ b
   await page.goto('http://127.0.0.1:5173/');
   await waitLocalReady(page);
 
-  await page.getByLabel('Lembrança').fill('Registro sintético que deve falhar.');
+  await page
+    .getByLabel('Lembrança', { exact: true })
+    .fill('Registro sintético que deve falhar.');
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByRole('alert')).toContainText('armazenamento local');
-  await expect(page.getByText('Lembrança guardada.')).toHaveCount(0);
+  await expect(page.getByText('Lembrança guardada.', { exact: true })).toHaveCount(0);
 
-  await page.getByLabel('Palavra ou frase').fill('deve falhar');
+  await page.getByLabel('Palavra ou frase', { exact: true }).fill('deve falhar');
   await page.getByRole('button', { name: 'Consultar' }).click();
   await expect(
     page.getByText('Não encontrei uma lembrança registrada que corresponda a essa busca.'),
@@ -247,9 +251,11 @@ test('browser upgrades seeded v1 data to v2 without loss and remains writable', 
   ).toHaveCount(1);
   await page.getByRole('button', { name: 'Ocultar histórico' }).click();
   await page.getByRole('button', { name: 'Corrigir' }).click();
-  await page.getByLabel('Texto corrigido').fill('Memória sintética migrada e corrigida.');
+  await page
+    .getByLabel('Texto corrigido', { exact: true })
+    .fill('Memória sintética migrada e corrigida.');
   await page.getByRole('button', { name: 'Salvar correção' }).click();
-  await expect(page.getByText('Correção salva.')).toBeVisible();
+  await expect(page.getByText('Correção salva.', { exact: true })).toBeVisible();
 });
 
 test('service worker update check and controlled reload preserve IndexedDB', async ({ page }) => {
