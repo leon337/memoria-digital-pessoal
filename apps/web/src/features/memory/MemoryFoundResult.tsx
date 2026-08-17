@@ -5,11 +5,7 @@ import {
   type MemoryQueryResponse,
 } from '@mdp/contracts';
 import { useEffect, useState, type FormEvent } from 'react';
-import {
-  correctMemory,
-  getMemoryHistory,
-  MemoryApiError,
-} from '../../lib/memory-api.js';
+import { correctMemory, getMemoryHistory, MemoryApiError } from '../../lib/memory-api.js';
 
 type FoundResult = Extract<MemoryQueryResponse, { status: 'FOUND' }>;
 
@@ -19,11 +15,7 @@ interface MemoryFoundResultProps {
   onCurrentChange: (next: FoundResult) => void;
 }
 
-export function MemoryFoundResult({
-  apiBaseUrl,
-  result,
-  onCurrentChange,
-}: MemoryFoundResultProps) {
+export function MemoryFoundResult({ apiBaseUrl, result, onCurrentChange }: MemoryFoundResultProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(result.answer);
   const [reason, setReason] = useState('');
@@ -103,7 +95,9 @@ export function MemoryFoundResult({
       if (error instanceof MemoryApiError && error.code === 'STALE_CORRECTION') {
         setStale(true);
         setEditing(false);
-        setActionError('A lembrança mudou desde esta consulta. Consulte novamente antes de corrigir.');
+        setActionError(
+          'A lembrança mudou desde esta consulta. Consulte novamente antes de corrigir.',
+        );
       } else if (error instanceof MemoryApiError && error.code === 'NO_CHANGE') {
         setActionError('A correção não altera o texto atual.');
       } else if (error instanceof MemoryApiError && error.code === 'VALIDATION_FAILED') {
