@@ -6,7 +6,7 @@
 
 ## Current boundary
 
-`SLICE 02 — Correction & History`
+`SLICE 03 — Local PWA + Offline`
 
 ## State
 
@@ -15,38 +15,43 @@
 ## Technical status
 
 - Slice 01: `COMPLETE / MERGED / POST-MERGE VALIDATED`.
-- Slice 02 implementation: `COMPLETE`.
-- Slice 02 merge: `COMPLETE`.
-- Slice 02 post-merge validation: `PASS`.
-- Final authorized branch HEAD: `524c9fe8f449dc2285e4ec2979d66f15d045256e`.
-- Final branch CI: `32002842343` / job `95306384754` — `PASS`.
-- Merge commit on `main`: `fcd6b8106d4a033bd91f2ee5e51ef1378458362c`.
-- Post-merge `main` CI: `32003011383` / job `95306867027` — `PASS`.
-- Automated tests: `95/95` PASS.
-- Browser E2E: `3/3` PASS.
-- Physical correction schema checks: PASS.
-- Slice 01 and Slice 02 PRF manifests: PASS.
-- Correction outage safe-envelope proof: PASS.
-- PR #4: `CLOSED / MERGED`.
+- Slice 02: `COMPLETE / MERGED / POST-MERGE VALIDATED`.
+- Slice 03 implementation: `COMPLETE`.
+- Slice 03 merge: `COMPLETE`.
+- Slice 03 post-merge validation: `PASS`.
+- Final authorized branch HEAD: `97a5435dbb73848e4725493b92940caaacbffb05`.
+- Final branch CI: `32024027770` / job `95369498690` — `PASS`.
+- Merge commit on `main`: `c1e2695a49f43d4dc596002ee6d4f61e54d1b056`.
+- Post-merge `main` CI: `32025282793` / job `95373303870` — `PASS`.
+- Automated tests: `129/129` PASS.
+- Standard browser E2E command: `8/8` PASS.
+- Isolated offline browser E2E: `5/5` PASS.
+- Slice 03 architecture guards: PASS.
+- PWA app-shell boundary verification: PASS.
+- UUID v7 runtime verification: PASS.
+- Exact five PostgreSQL product tables preserved: PASS.
+- Slice 01, Slice 02 and Slice 03 PRF manifests: PASS.
+- PostgreSQL outage safe-envelope proof: PASS.
+- PR #6: `CLOSED / MERGED`.
 
 ## Governance
 
 - LEANDRO is the final human authority.
-- LEANDRO explicitly granted HUMAN_GATE and merge authorization for Slice 02 on `2026-08-17` with `AUTORIZO`.
+- LEANDRO explicitly authorized Slice 03 implementation and later granted merge authorization on `2026-08-17` with `autorizo merge`.
 - Independent Emily audit: `NOT PERFORMED / NOT CLAIMED` in this runtime.
 - LÉO internal gate: `NOT PERFORMED / NOT CLAIMED` in this runtime.
-- LEANDRO's authorization is recorded as a scoped override of those unavailable operational gates for this Slice 02 merge only.
-- The authorized merge was executed and the resulting `main` state was fully revalidated.
+- LEANDRO's explicit merge authorization is recorded as the scoped final-human-authority decision for PR #6 and its documentary closeout; unavailable operational gates are not retrospectively claimed.
+- The authorized functional merge was executed and the resulting `main` state passed full post-merge validation before closeout.
 
 ## Safety boundary
 
 - Real sensitive data: `NOT AUTHORIZED`.
 - Pilot: `NOT AUTHORIZED`.
-- Slice 03: `NOT STARTED / NOT AUTHORIZED`.
-- AI/embeddings/voice: out of current boundary.
-- Offline/sync: out of current boundary.
+- Slice 04 synchronization: `NOT STARTED / NOT AUTHORIZED`.
+- Semantic retrieval, AI/embeddings and voice: out of current boundary.
 - Purge/deletion: out of current boundary.
+- Slice 03 local persistence does not authorize real sensitive data.
 
 ## Next action
 
-None for Slice 02. Any Slice 03 work requires separate definition and authorization.
+None for Slice 03. Any Slice 04 synchronization work requires separate definition, design/planning approval and explicit implementation authorization.
