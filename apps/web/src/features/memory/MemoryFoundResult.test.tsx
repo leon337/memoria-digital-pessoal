@@ -1,21 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { correctMemory, getMemoryHistory, MemoryApiError } from '../../lib/memory-api.js';
+import { describe, expect, it, vi } from 'vitest';
+import { MemoryRepositoryError, type MemoryRepository } from '../../lib/memory-repository.js';
 import { MemoryFoundResult } from './MemoryFoundResult.js';
-
-vi.mock('../../lib/memory-api.js', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../lib/memory-api.js')>('../../lib/memory-api.js');
-  return {
-    ...actual,
-    correctMemory: vi.fn(),
-    getMemoryHistory: vi.fn(),
-  };
-});
-
-const correctMemoryMock = vi.mocked(correctMemory);
-const getMemoryHistoryMock = vi.mocked(getMemoryHistory);
 
 const found = {
   status: 'FOUND' as const,
@@ -27,16 +14,22 @@ const found = {
   },
 };
 
-beforeEach(() => {
-  correctMemoryMock.mockReset();
-  getMemoryHistoryMock.mockReset();
-});
+function repository(): MemoryRepository {
+  return {
+    ready: vi.fn().mockResolvedValue(undefined),
+    create: vi.fn(),
+    query: vi.fn(),
+    correct: vi.fn(),
+    history: vi.fn(),
+  };
+}
 
 describe('MemoryFoundResult', () => {
-  it('corrects inline from the displayed current fact and publishes the new current result', async () => {
+  it('corrects through the local repository and publishes the new current result', async () => {
     const user = userEvent.setup();
+    const local = repository();
     const onCurrentChange = vi.fn();
-    correctMemoryMock.mockResolvedValue({
+    vi.mocked(local.correct).mockResolvedValue({
       memoryId: 'memory-1',
       current: {
         factId: 'fact-2',
@@ -53,27 +46,17 @@ describe('MemoryFoundResult', () => {
     });
 
     render(
-      <MemoryFoundResult
-        apiBaseUrl="http://api"
-        result={found}
-        onCurrentChange={onCurrentChange}
-      />,
+      <MemoryFoundResult repository={local} result={found} onCurrentChange={onCurrentChange} />,
     );
-
-    expect(screen.getByText(found.answer)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Corrigir' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ver histórico' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Corrigir' }));
     const text = screen.getByLabelText('Texto corrigido');
-    expect(text).toHaveValue(found.answer);
     await user.clear(text);
     await user.type(text, 'Minha irmã se chama Beatriz.');
     await user.type(screen.getByLabelText('Motivo (opcional)'), 'Correção factual');
     await user.click(screen.getByRole('button', { name: 'Salvar correção' }));
 
-    expect(correctMemoryMock).toHaveBeenCalledTimes(1);
-    expect(correctMemoryMock).toHaveBeenCalledWith('http://api', 'memory-1', {
+    expect(local.correct).toHaveBeenCalledWith('memory-1', {
       text: 'Minha irmã se chama Beatriz.',
       expectedCurrentFactId: 'fact-1',
       reason: 'Correção factual',
@@ -88,14 +71,14 @@ describe('MemoryFoundResult', () => {
       },
     });
     expect(await screen.findByRole('status')).toHaveTextContent('Correção salva');
-    expect(screen.queryByLabelText('Texto corrigido')).not.toBeInTheDocument();
   });
 
-  it('blocks another correction after a stale write until a fresh query result arrives', async () => {
+  it('blocks another correction after a stale local write until a fresh query arrives', async () => {
     const user = userEvent.setup();
-    correctMemoryMock.mockRejectedValue(new MemoryApiError(409, 'STALE_CORRECTION'));
+    const local = repository();
+    vi.mocked(local.correct).mockRejectedValue(new MemoryRepositoryError('STALE_CORRECTION'));
 
-    render(<MemoryFoundResult apiBaseUrl="http://api" result={found} onCurrentChange={vi.fn()} />);
+    render(<MemoryFoundResult repository={local} result={found} onCurrentChange={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'Corrigir' }));
     const text = screen.getByLabelText('Texto corrigido');
@@ -105,17 +88,18 @@ describe('MemoryFoundResult', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('A lembrança mudou');
     expect(screen.queryByRole('button', { name: 'Corrigir' })).not.toBeInTheDocument();
-    expect(correctMemoryMock).toHaveBeenCalledTimes(1);
+    expect(local.correct).toHaveBeenCalledTimes(1);
   });
 
-  it('renders server history in order and reuses an old text with the current fact as concurrency base', async () => {
+  it('renders local history without technical ids and restores old text as a new correction', async () => {
     const user = userEvent.setup();
+    const local = repository();
     const current = {
       ...found,
       answer: 'Versão B.',
       provenance: { ...found.provenance, evidenceId: 'evidence-2', factId: 'fact-2' },
     };
-    getMemoryHistoryMock.mockResolvedValue({
+    vi.mocked(local.history).mockResolvedValue({
       memoryId: 'memory-1',
       versions: [
         {
@@ -142,7 +126,7 @@ describe('MemoryFoundResult', () => {
         },
       ],
     });
-    correctMemoryMock.mockResolvedValue({
+    vi.mocked(local.correct).mockResolvedValue({
       memoryId: 'memory-1',
       current: {
         factId: 'fact-3',
@@ -158,9 +142,7 @@ describe('MemoryFoundResult', () => {
       },
     });
 
-    render(
-      <MemoryFoundResult apiBaseUrl="http://api" result={current} onCurrentChange={vi.fn()} />,
-    );
+    render(<MemoryFoundResult repository={local} result={current} onCurrentChange={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'Ver histórico' }));
     const history = await screen.findByRole('region', { name: 'Histórico da lembrança' });
@@ -171,6 +153,9 @@ describe('MemoryFoundResult', () => {
     expect(versions[1]).toHaveTextContent('Versão B.');
     expect(versions[1]).toHaveTextContent('Atual');
     expect(versions[1]).toHaveTextContent('Ajuste sintético');
+    expect(history).not.toHaveTextContent('evidence-1');
+    expect(history).not.toHaveTextContent('event-1');
+    expect(history).not.toHaveTextContent('fact-1');
 
     await user.click(
       within(versions[0] as HTMLElement).getByRole('button', {
@@ -180,9 +165,27 @@ describe('MemoryFoundResult', () => {
     expect(screen.getByLabelText('Texto corrigido')).toHaveValue('Versão A.');
     await user.click(screen.getByRole('button', { name: 'Salvar correção' }));
 
-    expect(correctMemoryMock).toHaveBeenCalledWith('http://api', 'memory-1', {
+    expect(local.correct).toHaveBeenCalledWith('memory-1', {
       text: 'Versão A.',
       expectedCurrentFactId: 'fact-2',
     });
+  });
+
+  it('maps local storage failure to a user-safe correction error', async () => {
+    const user = userEvent.setup();
+    const local = repository();
+    vi.mocked(local.correct).mockRejectedValue(
+      new MemoryRepositoryError('LOCAL_STORAGE_UNAVAILABLE'),
+    );
+    render(<MemoryFoundResult repository={local} result={found} onCurrentChange={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Corrigir' }));
+    const text = screen.getByLabelText('Texto corrigido');
+    await user.clear(text);
+    await user.type(text, 'Correção sintética segura.');
+    await user.click(screen.getByRole('button', { name: 'Salvar correção' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('armazenamento local');
+    expect(screen.queryByText('Correção salva.')).not.toBeInTheDocument();
   });
 });

@@ -5,17 +5,17 @@ import {
   type MemoryQueryResponse,
 } from '@mdp/contracts';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { correctMemory, getMemoryHistory, MemoryApiError } from '../../lib/memory-api.js';
+import { MemoryRepositoryError, type MemoryRepository } from '../../lib/memory-repository.js';
 
 type FoundResult = Extract<MemoryQueryResponse, { status: 'FOUND' }>;
 
 interface MemoryFoundResultProps {
-  apiBaseUrl: string;
+  repository: MemoryRepository;
   result: FoundResult;
   onCurrentChange: (next: FoundResult) => void;
 }
 
-export function MemoryFoundResult({ apiBaseUrl, result, onCurrentChange }: MemoryFoundResultProps) {
+export function MemoryFoundResult({ repository, result, onCurrentChange }: MemoryFoundResultProps) {
   const internallyPublishedFactId = useRef<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(result.answer);
@@ -76,7 +76,7 @@ export function MemoryFoundResult({ apiBaseUrl, result, onCurrentChange }: Memor
     setActionError(null);
     try {
       const normalizedReason = reason.trim();
-      const response = await correctMemory(apiBaseUrl, result.provenance.memoryId, {
+      const response = await repository.correct(result.provenance.memoryId, {
         text: normalizedText,
         expectedCurrentFactId: result.provenance.factId,
         ...(normalizedReason.length === 0 ? {} : { reason: normalizedReason }),
@@ -99,18 +99,28 @@ export function MemoryFoundResult({ apiBaseUrl, result, onCurrentChange }: Memor
         },
       });
     } catch (error) {
-      if (error instanceof MemoryApiError && error.code === 'STALE_CORRECTION') {
+      if (error instanceof MemoryRepositoryError && error.code === 'STALE_CORRECTION') {
         setStale(true);
         setEditing(false);
         setActionError(
           'A lembrança mudou desde esta consulta. Consulte novamente antes de corrigir.',
         );
-      } else if (error instanceof MemoryApiError && error.code === 'NO_CHANGE') {
+      } else if (error instanceof MemoryRepositoryError && error.code === 'NO_CHANGE') {
         setActionError('A correção não altera o texto atual.');
-      } else if (error instanceof MemoryApiError && error.code === 'VALIDATION_FAILED') {
+      } else if (error instanceof MemoryRepositoryError && error.code === 'VALIDATION_FAILED') {
         setActionError('Revise o texto e o motivo da correção.');
+      } else if (
+        error instanceof MemoryRepositoryError &&
+        error.code === 'LOCAL_STORAGE_UNAVAILABLE'
+      ) {
+        setActionError('Não foi possível salvar porque o armazenamento local está indisponível.');
+      } else if (
+        error instanceof MemoryRepositoryError &&
+        error.code === 'LOCAL_DATA_INTEGRITY_ERROR'
+      ) {
+        setActionError('Não foi possível validar a lembrança armazenada localmente.');
       } else {
-        setActionError('Não foi possível salvar a correção agora.');
+        setActionError('Não foi possível salvar a correção local agora.');
       }
     } finally {
       setSaving(false);
@@ -131,9 +141,18 @@ export function MemoryFoundResult({ apiBaseUrl, result, onCurrentChange }: Memor
 
     setHistoryLoading(true);
     try {
-      setHistory(await getMemoryHistory(apiBaseUrl, result.provenance.memoryId));
-    } catch {
-      setHistoryError('Não foi possível carregar o histórico agora.');
+      setHistory(await repository.history(result.provenance.memoryId));
+    } catch (error) {
+      if (error instanceof MemoryRepositoryError && error.code === 'LOCAL_STORAGE_UNAVAILABLE') {
+        setHistoryError('Não foi possível carregar o histórico: armazenamento local indisponível.');
+      } else if (
+        error instanceof MemoryRepositoryError &&
+        error.code === 'LOCAL_DATA_INTEGRITY_ERROR'
+      ) {
+        setHistoryError('O histórico local não pôde ser validado com segurança.');
+      } else {
+        setHistoryError('Não foi possível carregar o histórico local agora.');
+      }
     } finally {
       setHistoryLoading(false);
     }
@@ -220,9 +239,6 @@ export function MemoryFoundResult({ apiBaseUrl, result, onCurrentChange }: Memor
                   </div>
                   <p>{version.content}</p>
                   {version.reason ? <p>Motivo: {version.reason}</p> : null}
-                  <p className="provenance">
-                    Evidência: {version.evidenceId} · Evento: {version.eventId}
-                  </p>
                   {!version.isCurrent && !stale ? (
                     <button type="button" onClick={() => startEditing(version.content)}>
                       Usar este texto como nova correção

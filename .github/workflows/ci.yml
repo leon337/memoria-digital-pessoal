@@ -8,7 +8,7 @@ on:
 jobs:
   foundation:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       PORT: '3000'
       DATABASE_URL: postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp
@@ -60,12 +60,18 @@ jobs:
       - name: Verify Slice 02 PRF manifest
         working-directory: artifacts/phases/SLICE-02-CORRECTION-HISTORY
         run: sha256sum -c PHASE-02-ARTIFACT-MANIFEST.sha256
+      - name: Verify Slice 03 PRF manifest
+        working-directory: artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE
+        run: sha256sum -c PHASE-03-ARTIFACT-MANIFEST.sha256
       - run: pnpm test
       - run: pnpm build
+      - name: Verify Slice 03 PWA app-shell boundary
+        run: node scripts/verify-slice03-pwa.mjs
       - name: Verify workspace runtime import
         run: pnpm --filter @mdp/shared exec node -e "import('@mdp/shared').then(m=>{if(!m.createId || m.createId()[14]!=='7') process.exit(1)})"
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
+      - run: pnpm e2e:offline
       - name: Verify live and ready degradation with real PostgreSQL outage
         run: |
           pnpm --filter @mdp/api start >/tmp/mdp-api.log 2>&1 &

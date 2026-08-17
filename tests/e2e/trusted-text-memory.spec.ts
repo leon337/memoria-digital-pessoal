@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('stores and retrieves a trusted text memory with provenance and UNKNOWN fallback', async ({
+test('stores and retrieves a trusted text memory locally with provenance and UNKNOWN fallback', async ({
   page,
   request,
 }) => {
@@ -9,7 +9,7 @@ test('stores and retrieves a trusted text memory with provenance and UNKNOWN fal
     .toBe(200);
 
   await page.goto('/');
-  await expect(page.getByRole('status', { name: '' }).first()).toHaveText('API pronta');
+  await expect(page.getByText('Armazenamento local pronto')).toBeVisible();
   await expect(page.getByLabel('Ambiente de laboratório')).toContainText(
     'Use somente dados sintéticos',
   );

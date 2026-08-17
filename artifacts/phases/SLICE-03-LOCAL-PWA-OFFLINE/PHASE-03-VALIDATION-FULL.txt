@@ -1,0 +1,37 @@
+SLICE-03 VALIDATION FULL
+validated_head=14bb9792c3a1186332c1b74ba3f39b7dae4907e6
+ci_run=32023403748
+ci_job=95367614875
+
+PASS pnpm install --frozen-lockfile
+PASS PostgreSQL health
+PASS prisma validate/generate/migrate
+PASS exact five PostgreSQL product tables
+PASS Slice 02 correction physical schema
+PASS pnpm typecheck
+PASS pnpm lint
+PASS pnpm format:check
+PASS Slice 01 PRF manifest
+PASS Slice 02 PRF manifest
+PASS pnpm test
+PASS pnpm build
+PASS node scripts/verify-slice03-pwa.mjs
+PASS UUID v7 workspace runtime import
+PASS Playwright Chromium installation
+PASS pnpm e2e (3/3)
+PASS pnpm e2e:offline (5/5)
+PASS real PostgreSQL outage proof: live=200 ready=503 memory=503, safe SERVICE_UNAVAILABLE envelope
+
+Slice03 acceptance:
+PASS offline reopen after Service Worker priming
+PASS create/query/correct/history/append-only restore while network offline
+PASS reload while offline preserves current state/history
+PASS no memory API traffic required by isolated offline flow
+PASS two-tab same-base write gives one success and one stale rejection
+PASS local storage failure never reports successful persistence
+PASS browser v1 seed upgrades to v2 and remains writable
+PASS update check/controller message/reload preserves IndexedDB
+PASS architecture guards
+PASS domain remains browser-storage neutral
+PASS active PWA memory path has no HTTP fallback
+PASS no API runtime cache / Background Sync

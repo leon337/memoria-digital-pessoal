@@ -1,31 +1,24 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { correctMemory, queryMemory } from '../../lib/memory-api.js';
+import { describe, expect, it, vi } from 'vitest';
+import type { MemoryRepository } from '../../lib/memory-repository.js';
 import { QueryMemoryForm } from './QueryMemoryForm.js';
 
-vi.mock('../../lib/memory-api.js', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../lib/memory-api.js')>('../../lib/memory-api.js');
+function repository(): MemoryRepository {
   return {
-    ...actual,
-    correctMemory: vi.fn(),
-    queryMemory: vi.fn(),
+    ready: vi.fn().mockResolvedValue(undefined),
+    create: vi.fn(),
+    query: vi.fn(),
+    correct: vi.fn(),
+    history: vi.fn(),
   };
-});
-
-const correctMemoryMock = vi.mocked(correctMemory);
-const queryMemoryMock = vi.mocked(queryMemory);
-
-beforeEach(() => {
-  correctMemoryMock.mockReset();
-  queryMemoryMock.mockReset();
-});
+}
 
 describe('QueryMemoryForm', () => {
-  it('shows the exact recorded statement, provenance and correction/history actions for FOUND', async () => {
+  it('shows the current statement and correction/history actions for FOUND', async () => {
     const user = userEvent.setup();
-    queryMemoryMock.mockResolvedValue({
+    const local = repository();
+    vi.mocked(local.query).mockResolvedValue({
       status: 'FOUND',
       answer: 'Minha irmã se chama Ana.',
       provenance: {
@@ -34,21 +27,22 @@ describe('QueryMemoryForm', () => {
         factId: 'fact-id',
       },
     });
-    render(<QueryMemoryForm apiBaseUrl="http://api" enabled />);
+    render(<QueryMemoryForm repository={local} enabled />);
 
     await user.type(screen.getByLabelText('Palavra ou frase'), '  Ana  ');
     await user.click(screen.getByRole('button', { name: 'Consultar' }));
 
-    expect(queryMemoryMock).toHaveBeenCalledWith('http://api', 'Ana');
+    expect(local.query).toHaveBeenCalledWith('Ana');
     expect(await screen.findByText('Minha irmã se chama Ana.')).toBeInTheDocument();
     expect(screen.getByText('Fonte: lembrança guardada')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Corrigir' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ver histórico' })).toBeInTheDocument();
   });
 
-  it('keeps correction success feedback after the parent publishes the new current fact', async () => {
+  it('keeps correction success feedback after publishing the new local current fact', async () => {
     const user = userEvent.setup();
-    queryMemoryMock.mockResolvedValue({
+    const local = repository();
+    vi.mocked(local.query).mockResolvedValue({
       status: 'FOUND',
       answer: 'Minha irmã se chama Ana.',
       provenance: {
@@ -57,7 +51,7 @@ describe('QueryMemoryForm', () => {
         factId: 'fact-1',
       },
     });
-    correctMemoryMock.mockResolvedValue({
+    vi.mocked(local.correct).mockResolvedValue({
       memoryId: 'memory-id',
       current: {
         factId: 'fact-2',
@@ -72,7 +66,7 @@ describe('QueryMemoryForm', () => {
         reason: null,
       },
     });
-    render(<QueryMemoryForm apiBaseUrl="http://api" enabled />);
+    render(<QueryMemoryForm repository={local} enabled />);
 
     await user.type(screen.getByLabelText('Palavra ou frase'), 'Ana');
     await user.click(screen.getByRole('button', { name: 'Consultar' }));
@@ -84,14 +78,19 @@ describe('QueryMemoryForm', () => {
     await user.type(text, 'Minha irmã se chama Beatriz.');
     await user.click(screen.getByRole('button', { name: 'Salvar correção' }));
 
+    expect(local.correct).toHaveBeenCalledWith('memory-id', {
+      text: 'Minha irmã se chama Beatriz.',
+      expectedCurrentFactId: 'fact-1',
+    });
     expect(await screen.findByText('Minha irmã se chama Beatriz.')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Correção salva');
   });
 
   it('presents UNKNOWN without fabricating an answer or correction actions', async () => {
     const user = userEvent.setup();
-    queryMemoryMock.mockResolvedValue({ status: 'UNKNOWN', answer: null, provenance: null });
-    render(<QueryMemoryForm apiBaseUrl="http://api" enabled />);
+    const local = repository();
+    vi.mocked(local.query).mockResolvedValue({ status: 'UNKNOWN', answer: null, provenance: null });
+    render(<QueryMemoryForm repository={local} enabled />);
 
     await user.type(screen.getByLabelText('Palavra ou frase'), 'ausente');
     await user.click(screen.getByRole('button', { name: 'Consultar' }));
@@ -104,8 +103,8 @@ describe('QueryMemoryForm', () => {
     expect(screen.queryByRole('button', { name: 'Ver histórico' })).not.toBeInTheDocument();
   });
 
-  it('explains literal search behavior and is disabled when the API is unavailable', () => {
-    render(<QueryMemoryForm apiBaseUrl="http://api" enabled={false} />);
+  it('explains literal search behavior and disables only for local storage readiness failure', () => {
+    render(<QueryMemoryForm repository={repository()} enabled={false} />);
     expect(
       screen.getByText(
         'A busca desta etapa procura palavras ou frases exatamente dentro das lembranças guardadas.',
