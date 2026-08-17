@@ -4,7 +4,7 @@ import {
   type MemoryHistoryResponse,
   type MemoryQueryResponse,
 } from '@mdp/contracts';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { correctMemory, getMemoryHistory, MemoryApiError } from '../../lib/memory-api.js';
 
 type FoundResult = Extract<MemoryQueryResponse, { status: 'FOUND' }>;
@@ -16,6 +16,7 @@ interface MemoryFoundResultProps {
 }
 
 export function MemoryFoundResult({ apiBaseUrl, result, onCurrentChange }: MemoryFoundResultProps) {
+  const internallyPublishedFactId = useRef<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(result.answer);
   const [reason, setReason] = useState('');
@@ -29,12 +30,17 @@ export function MemoryFoundResult({ apiBaseUrl, result, onCurrentChange }: Memor
   const [historyError, setHistoryError] = useState<string | null>(null);
 
   useEffect(() => {
+    const isInternalCorrection = internallyPublishedFactId.current === result.provenance.factId;
+    internallyPublishedFactId.current = null;
+
     setEditing(false);
     setText(result.answer);
     setReason('');
     setSaving(false);
     setStale(false);
-    setFeedback(null);
+    if (!isInternalCorrection) {
+      setFeedback(null);
+    }
     setActionError(null);
     setHistory(null);
     setShowHistory(false);
@@ -82,6 +88,7 @@ export function MemoryFoundResult({ apiBaseUrl, result, onCurrentChange }: Memor
       setHistory(null);
       setShowHistory(false);
       setFeedback('Correção salva.');
+      internallyPublishedFactId.current = response.current.factId;
       onCurrentChange({
         status: 'FOUND',
         answer: response.current.content,
