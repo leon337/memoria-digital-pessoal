@@ -85,7 +85,9 @@ export async function getMemoryHistory(
   baseUrl: string,
   memoryId: string,
 ): Promise<MemoryHistoryResponse> {
-  const response = await fetch(endpoint(baseUrl, `/memories/${encodeURIComponent(memoryId)}/history`));
+  const response = await fetch(
+    endpoint(baseUrl, `/memories/${encodeURIComponent(memoryId)}/history`),
+  );
   await throwIfNotOk(response);
   return memoryHistoryResponseSchema.parse(await response.json());
 }
