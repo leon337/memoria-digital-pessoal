@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Memória Digital Pessoal">
+  <rect width="512" height="512" rx="96" fill="#f6f7fa"/>
+  <rect x="82" y="82" width="348" height="348" rx="82" fill="#32394b"/>
+  <circle cx="128" cy="190" r="20" fill="#fff"/>
+  <rect x="164" y="180" width="164" height="18" rx="9" fill="#fff"/>
+  <rect x="164" y="236" width="216" height="18" rx="9" fill="#fff"/>
+  <rect x="164" y="292" width="134" height="18" rx="9" fill="#fff"/>
+</svg>

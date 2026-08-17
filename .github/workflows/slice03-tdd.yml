@@ -20,21 +20,22 @@ jobs:
         with:
           node-version: '24'
       - run: corepack enable
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - name: Apply project formatter
-        run: pnpm exec prettier apps/web/src tests/architecture --write
-      - name: Commit lockfile or formatter output when needed
+        run: pnpm exec prettier apps/web/src apps/web/vite.config.ts apps/web/tsconfig.app.json apps/web/index.html scripts/verify-slice03-pwa.mjs tests/architecture --write
+      - name: Commit formatter output when needed
         run: |
-          if git diff --quiet -- pnpm-lock.yaml apps/web/src tests/architecture; then
-            echo "Generated files already current."
+          if git diff --quiet -- apps/web/src apps/web/vite.config.ts apps/web/tsconfig.app.json apps/web/index.html scripts/verify-slice03-pwa.mjs tests/architecture; then
+            echo "Formatting already current."
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add pnpm-lock.yaml apps/web/src tests/architecture
-            git commit -m "chore(slice03): materialize generated project files"
+            git add apps/web/src apps/web/vite.config.ts apps/web/tsconfig.app.json apps/web/index.html scripts/verify-slice03-pwa.mjs tests/architecture
+            git commit -m "style(slice03): apply project formatter"
             git push origin HEAD:slice/03-local-offline
           fi
       - run: pnpm build:packages
       - run: pnpm --filter @mdp/web typecheck
-      - run: pnpm exec prettier apps/web/src tests/architecture --check
       - run: pnpm --filter @mdp/web test
+      - run: pnpm --filter @mdp/web build
+      - run: node scripts/verify-slice03-pwa.mjs
