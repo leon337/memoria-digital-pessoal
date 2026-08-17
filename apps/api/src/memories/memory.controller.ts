@@ -63,11 +63,7 @@ export class MemoryController {
 
     const parsed = correctMemoryRequestSchema.safeParse(body);
     if (!parsed.success || !isUuidV7(parsed.data.expectedCurrentFactId)) {
-      throw new CodedHttpException(
-        'VALIDATION_FAILED',
-        422,
-        'Os dados enviados são inválidos.',
-      );
+      throw new CodedHttpException('VALIDATION_FAILED', 422, 'Os dados enviados são inválidos.');
     }
 
     try {
@@ -84,11 +80,7 @@ export class MemoryController {
         );
       }
       if (error instanceof NoChangeCorrectionError) {
-        throw new CodedHttpException(
-          'NO_CHANGE',
-          422,
-          'A correção não altera o texto atual.',
-        );
+        throw new CodedHttpException('NO_CHANGE', 422, 'A correção não altera o texto atual.');
       }
       throw error;
     }
