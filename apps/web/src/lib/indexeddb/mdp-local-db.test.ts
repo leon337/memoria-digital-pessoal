@@ -50,12 +50,10 @@ describe('mdp-local IndexedDB schema', () => {
     expect(
       v2.transaction('evidence').objectStore('evidence').indexNames.contains('memoryId'),
     ).toBe(true);
-    expect(v2.transaction('facts').objectStore('facts').index('supersedesFactId').unique).toBe(
-      true,
-    );
-    expect(v2.transaction('currentFacts').objectStore('currentFacts').index('memoryId').unique).toBe(
-      false,
-    );
+    expect(v2.transaction('facts').objectStore('facts').index('supersedesFactId').unique).toBe(true);
+    expect(
+      v2.transaction('currentFacts').objectStore('currentFacts').index('memoryId').unique,
+    ).toBe(false);
     expect(
       await requestAsPromise(v2.transaction('memories').objectStore('memories').get('m-v1')),
     ).toBeTruthy();
