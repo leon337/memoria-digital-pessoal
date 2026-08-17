@@ -10,31 +10,39 @@
 
 ## State
 
-`IMPLEMENTED / TECHNICALLY VALIDATED / READY_FOR_GOVERNANCE / NOT MERGED`
+`HUMAN_GATE GRANTED / MERGE AUTHORIZED / PRE-MERGE`
 
 ## Authorization lineage
 
 - LEANDRO approved the Slice 02 correction/history design on `2026-08-17`.
 - LEANDRO approved the written specification on `2026-08-17`.
-- LEANDRO selected execution mode `1 — Subagent-Driven` and authorized Slice 02 implementation.
-- The runtime did not expose an independent subagent dispatcher; MESTRE preserved task isolation, TDD and CI review without claiming nonexistent agent execution.
-- No merge authorization has been granted.
+- LEANDRO authorized Slice 02 implementation.
+- Final branch technical validation completed on `2026-08-17`.
+- LEANDRO explicitly granted HUMAN_GATE and merge authorization on `2026-08-17` by the instruction `AUTORIZO`.
+- Independent Emily audit and LÉO internal gate were unavailable in this runtime and are not claimed as executed.
+- LEANDRO's explicit authorization is recorded as a scoped human-authority override of that operational dependency for this merge only.
 
-Implementation authorization is limited to Slice 02. It does not authorize real sensitive data, pilot, Slice 03 or merge without the governed gate decision.
+This authorization is limited to merging and formally closing Slice 02 after successful post-merge validation. It does not authorize real sensitive data, pilot, Slice 03, AI, voice, offline/sync, purge/deletion or unrelated infrastructure.
 
-## Technical checkpoint
+## Final technical checkpoint before authorization
 
-- PR: `#4 — SLICE 02: correction and history` — OPEN / NOT MERGED.
-- Validated branch HEAD: `361214e97e9b70df7092ee1f6d5c3944446edda0`.
-- Canonical pre-gate CI: `32000681041` / job `95300284264` — PASS.
+- PR: `#4 — SLICE 02: correction and history` — OPEN / PRE-MERGE.
+- Authorized branch HEAD before this governance-only checkpoint update: `1344d19c104d078deaad05eca008282130ee0b38`.
+- Canonical pre-merge CI: `32001570247` / job `95302766045` — PASS.
 - Automated tests: `95/95` PASS across `25` files.
 - Browser E2E: `3/3` PASS.
+- Typecheck: PASS.
+- Lint: PASS.
+- Format: PASS.
+- Build: PASS.
+- Slice 01 PRF manifest: PASS.
+- Slice 02 PRF manifest: PASS.
 - Schema: exact five product tables preserved.
 - Correction schema catalog proof: `fact_lineage_column=1 fact_lineage_unique=1 ledger_columns=3 correction_check=1`.
 - Real PostgreSQL outage proof: correction returns safe `503 SERVICE_UNAVAILABLE` without submitted-text or SQL leakage.
 - Evidence: `docs/evidence/slice-02/SLICE-02-EVIDENCE-001.md`.
-- PRF: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/` after artifact freeze.
-- Open PR review threads observed before evidence freeze: `0`.
+- PRF: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/`.
+- Open PR review threads observed at authorization: `0`.
 
 ## Proven invariants
 
@@ -64,8 +72,9 @@ Final MESTRE review found that the accessible success confirmation could be clea
 - Independent Emily audit: `NOT PERFORMED / NOT CLAIMED` in this runtime.
 - LÉO internal gate: `NOT PERFORMED / NOT CLAIMED` in this runtime.
 - HUMAN_GATE authority: `LEANDRO`.
-- HUMAN_GATE decision for merge: `PENDING`.
-- Merge authorized: `false`.
+- HUMAN_GATE decision for merge: `GRANTED`.
+- Human override of unavailable operational gates: `GRANTED_FOR_THIS_MERGE_ONLY`.
+- Merge authorized: `true`.
 - Merge executed: `false`.
 - Post-merge `main` validation: `PENDING`.
 
@@ -77,4 +86,4 @@ Final MESTRE review found that the accessible success confirmation could be clea
 
 ## Next action
 
-Complete and checksum the Slice 02 PRF, rerun full branch CI with manifest verification, then present the pre-merge governance checkpoint to LEANDRO. Do not merge until the required governance decision is explicit.
+Run CI on this governance-only checkpoint commit, promote PR #4 from draft, merge the validated authorized HEAD, validate `main`, then record formal Slice 02 completion separately.
