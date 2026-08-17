@@ -1,10 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  MemoryRepositoryError,
-  type MemoryRepository,
-} from '../../lib/memory-repository.js';
+import { MemoryRepositoryError, type MemoryRepository } from '../../lib/memory-repository.js';
 import { StoreMemoryForm } from './StoreMemoryForm.js';
 
 function repository(): MemoryRepository {
