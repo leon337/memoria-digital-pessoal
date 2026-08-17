@@ -20,11 +20,11 @@ function makeStore(overrides: Partial<MemoryStore> = {}): MemoryStore {
   };
 }
 
-const request: CorrectMemoryRequest = {
+const request = {
   text: 'Texto corrigido.',
   expectedCurrentFactId: '0198c000-0000-7000-8000-000000000001',
   reason: 'ajuste',
-};
+} satisfies CorrectMemoryRequest;
 
 function correctedRecord() {
   return createTextCorrectionRecord({
@@ -102,18 +102,18 @@ describe('MemoryService correction and history', () => {
       now: () => new Date(),
       createId: () => '0198c000-0000-7000-8000-000000000003',
     });
-    await expect(stale.correct('0198c000-0000-7000-8000-000000000010', request)).rejects.toBeInstanceOf(
-      StaleCorrectionError,
-    );
+    await expect(
+      stale.correct('0198c000-0000-7000-8000-000000000010', request),
+    ).rejects.toBeInstanceOf(StaleCorrectionError);
 
     const missing = new MemoryService({
       store: makeStore(),
       now: () => new Date(),
       createId: () => '0198c000-0000-7000-8000-000000000003',
     });
-    await expect(missing.correct('0198c000-0000-7000-8000-000000000010', request)).rejects.toBeInstanceOf(
-      MemoryNotFoundError,
-    );
+    await expect(
+      missing.correct('0198c000-0000-7000-8000-000000000010', request),
+    ).rejects.toBeInstanceOf(MemoryNotFoundError);
   });
 
   it('maps domain NO_CHANGE without pretending persistence succeeded', async () => {
@@ -127,9 +127,9 @@ describe('MemoryService correction and history', () => {
       createId: () => '0198c000-0000-7000-8000-000000000003',
     });
 
-    await expect(service.correct('0198c000-0000-7000-8000-000000000010', request)).rejects.toBeInstanceOf(
-      NoChangeCorrectionError,
-    );
+    await expect(
+      service.correct('0198c000-0000-7000-8000-000000000010', request),
+    ).rejects.toBeInstanceOf(NoChangeCorrectionError);
   });
 
   it('maps stored history timestamps to the public ISO contract', async () => {
@@ -166,9 +166,11 @@ describe('MemoryService correction and history', () => {
       ],
     });
     await expect(
-      new MemoryService({ store: makeStore(), now: () => new Date(), createId: () => 'unused' }).history(
-        '0198c000-0000-7000-8000-000000000010',
-      ),
+      new MemoryService({
+        store: makeStore(),
+        now: () => new Date(),
+        createId: () => 'unused',
+      }).history('0198c000-0000-7000-8000-000000000010'),
     ).resolves.toBeNull();
   });
 });
