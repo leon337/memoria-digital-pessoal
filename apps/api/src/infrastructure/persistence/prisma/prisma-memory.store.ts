@@ -226,7 +226,7 @@ export class PrismaMemoryStore implements MemoryStore {
               recordedAt: current.recordedAt,
             },
             text: input.text,
-            reason: input.reason,
+            ...(input.reason === undefined ? {} : { reason: input.reason }),
             correctedAt: input.correctedAt,
             ids: input.ids,
           });
