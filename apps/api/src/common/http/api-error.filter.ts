@@ -8,7 +8,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import type { ApiErrorCode, ApiErrorEnvelope } from './api-error.js';
+import { CodedHttpException, type ApiErrorCode, type ApiErrorEnvelope } from './api-error.js';
 
 @Catch()
 export class ApiErrorFilter implements ExceptionFilter {
@@ -21,7 +21,11 @@ export class ApiErrorFilter implements ExceptionFilter {
     let code: ApiErrorCode = 'INTERNAL_ERROR';
     let message = 'Ocorreu um erro interno.';
 
-    if (exception instanceof ServiceUnavailableException) {
+    if (exception instanceof CodedHttpException) {
+      status = exception.getStatus();
+      code = exception.code;
+      message = exception.safeMessage;
+    } else if (exception instanceof ServiceUnavailableException) {
       status = 503;
       code = 'SERVICE_UNAVAILABLE';
       message = 'Serviço temporariamente indisponível.';
