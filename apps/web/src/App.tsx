@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { QueryMemoryForm } from './features/memory/QueryMemoryForm.js';
 import { StoreMemoryForm } from './features/memory/StoreMemoryForm.js';
+import { PwaUpdateNotice } from './features/pwa/PwaUpdateNotice.js';
 import type { MemoryRepository } from './lib/memory-repository.js';
 import { useConnectivity } from './lib/use-connectivity.js';
 
@@ -48,6 +49,8 @@ export function App({ repository }: { repository: MemoryRepository }) {
           {connectivity === 'online' ? 'Online' : 'Offline'}
         </p>
       </header>
+
+      <PwaUpdateNotice />
 
       <div className="memory-grid">
         <StoreMemoryForm repository={repository} enabled={enabled} />
