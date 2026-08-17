@@ -76,10 +76,12 @@ jobs:
 
           live_healthy="$(curl -sS -o /tmp/live-healthy.json -w '%{http_code}' http://127.0.0.1:3000/health/live)"
           ready_healthy="$(curl -sS -o /tmp/ready-healthy.json -w '%{http_code}' http://127.0.0.1:3000/health/ready)"
+          node scripts/verify-slice02-correction-outage.mjs prepare
           docker compose stop postgres
           live_db_down="$(curl -sS -o /tmp/live-db-down.json -w '%{http_code}' http://127.0.0.1:3000/health/live)"
           ready_db_down="$(curl -sS -o /tmp/ready-db-down.json -w '%{http_code}' http://127.0.0.1:3000/health/ready)"
           memory_db_down="$(curl --max-time 15 -sS -o /tmp/memory-db-down.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{"text":"Registro sintético de indisponibilidade."}' http://127.0.0.1:3000/memories)"
+          node scripts/verify-slice02-correction-outage.mjs verify
           docker compose start postgres
 
           printf 'healthy live=%s ready=%s\n' "$live_healthy" "$ready_healthy"
