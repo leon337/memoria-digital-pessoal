@@ -6,9 +6,9 @@
 
 ## Status
 
-`IMPLEMENTED / TECHNICALLY VALIDATED / READY_FOR_GOVERNANCE`
+`COMPLETE / DELIVERED / MERGED / POST-MERGE VALIDATED`
 
-This is a pre-merge state. Slice 02 is not complete, delivered or integrated until the governed review/gate sequence and explicit HUMAN_GATE by LEANDRO authorize merge, followed by post-merge validation on `main`.
+Slice 02 is integrated into `main`. The authorized final branch HEAD passed full CI before merge, PR #4 was merged, and the resulting merge commit passed the same full CI on `main`.
 
 ## Boundary
 
@@ -27,14 +27,16 @@ current textual fact
 
 ## Authorized design
 
-LEANDRO approved the Slice 02 design and written specification on `2026-08-17`, then authorized implementation in execution mode `1 — Subagent-Driven`. The runtime did not expose an independent subagent dispatcher, so MESTRE preserved the selected discipline through isolated task boundaries, RED→GREEN TDD, diff review and fresh CI gates without claiming nonexistent agent execution.
+LEANDRO approved the Slice 02 design and written specification on `2026-08-17`, authorized implementation, and later granted explicit HUMAN_GATE/merge authorization with `AUTORIZO` on `2026-08-17`.
+
+The runtime did not expose independent Emily/LÉO execution. Those gates are not claimed as performed; LEANDRO's explicit authorization was recorded as a scoped final-human-authority override for PR #4 only.
 
 Canonical design/specification:
 
 - `docs/superpowers/specs/2026-08-17-slice-02-correction-history-design.md`
 - `docs/superpowers/plans/2026-08-17-slice-02-correction-history.md`
 
-## Implemented scope
+## Delivered scope
 
 - full-text corrections only;
 - immutable original Evidence and Facts;
@@ -58,26 +60,28 @@ Canonical design/specification:
 - real PostgreSQL outage proof for correction returning safe `503 SERVICE_UNAVAILABLE`;
 - physical migration checks for correction lineage and ledger constraints.
 
-## Technical checkpoint
+## Final technical checkpoint
 
-- Pull request: `#4 — SLICE 02: correction and history` — OPEN / NOT MERGED.
-- Validated branch HEAD: `361214e97e9b70df7092ee1f6d5c3944446edda0`.
-- Canonical pre-gate CI: `32000681041` / job `95300284264` — PASS.
+- Pull request: `#4 — SLICE 02: correction and history` — CLOSED / MERGED.
+- Final authorized branch HEAD: `524c9fe8f449dc2285e4ec2979d66f15d045256e`.
+- Final branch CI: `32002842343` / job `95306384754` — PASS.
+- Merge commit: `fcd6b8106d4a033bd91f2ee5e51ef1378458362c`.
+- Post-merge `main` CI: `32003011383` / job `95306867027` — PASS.
 - Automated tests: `95/95` PASS across `25` test files.
 - Browser E2E: `3/3` PASS.
 - Exact product tables: `current_facts,evidence,facts,ledger_events,memories`.
 - Physical correction schema check: `fact_lineage_column=1 fact_lineage_unique=1 ledger_columns=3 correction_check=1`.
 - Database outage: live `200`, ready `503`, memory create `503`, correction `503 SERVICE_UNAVAILABLE` with safe envelope.
-- Open PR review threads observed before evidence freeze: `0`.
+- Slice 01 and Slice 02 PRF manifests: PASS.
 
 ## TDD/review outcome
 
 The implementation was built in task-level RED→GREEN cycles. A late technical review found one UX defect: the accessible `Correção salva` confirmation was cleared when `QueryMemoryForm` published the newly corrected `factId`. A test-only RED commit reproduced the problem, then a minimal `useRef`-based fix preserved feedback only for the component's own current-state publication while fresh external queries still reset local state.
 
 - UX RED commit: `1218f03805cca35b3e447d123b18869adbbd3282`.
-- UX RED CI: `32000553631` / job `95299911316` — expected failure; 94 prior tests passed and the new regression test failed.
+- UX RED CI: `32000553631` / job `95299911316` — expected failure.
 - UX fix commit: `361214e97e9b70df7092ee1f6d5c3944446edda0`.
-- Fresh GREEN CI: `32000681041` / job `95300284264` — 95/95 tests and 3/3 E2E passed.
+- GREEN CI: `32000681041` / job `95300284264` — 95/95 tests and 3/3 E2E passed.
 
 ## Explicitly not delivered or authorized
 
@@ -95,10 +99,10 @@ The implementation was built in task-level RED→GREEN cycles. A late technical 
 - controlled pilot;
 - Slice 03 implementation.
 
-## Governance boundary
+## Governance closeout
 
-Technical validation is complete for the pre-gate branch, but governance is not complete. No independent Emily audit or LÉO internal gate is claimed because this runtime does not expose those independent agent executions. HUMAN_GATE remains exclusively LEANDRO's authority, and merge is not authorized by green CI alone.
+HUMAN_GATE was granted and consumed for PR #4. The merge succeeded and post-merge `main` validation passed. The pre-gate PRF remains frozen as historical evidence; no independent Emily/LÉO execution is retrospectively fabricated.
 
 ## Next action
 
-Freeze reproducible evidence and PRF artifacts, verify their manifest in CI, then present the truthful pre-merge governance checkpoint to LEANDRO. Do not merge until the required governance decision is explicit.
+None for Slice 02. Return to the roadmap boundary. Slice 03 requires separate definition and authorization.
