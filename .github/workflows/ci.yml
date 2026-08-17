@@ -60,6 +60,9 @@ jobs:
       - name: Verify Slice 02 PRF manifest
         working-directory: artifacts/phases/SLICE-02-CORRECTION-HISTORY
         run: sha256sum -c PHASE-02-ARTIFACT-MANIFEST.sha256
+      - name: Verify Slice 03 PRF manifest
+        working-directory: artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE
+        run: sha256sum -c PHASE-03-ARTIFACT-MANIFEST.sha256
       - run: pnpm test
       - run: pnpm build
       - name: Verify Slice 03 PWA app-shell boundary
