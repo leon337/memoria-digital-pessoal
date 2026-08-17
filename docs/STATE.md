@@ -6,7 +6,7 @@
 
 ## Current phase
 
-`SLICE 01 — IN_REVIEW / READY_FOR_GATE`
+`SLICE 01 — COMPLETE / ENTREGUE`
 
 ## Status
 
@@ -18,7 +18,7 @@
 | PLAN-01 | COMPLETE |
 | BOOT-01 | COMPLETE |
 | FOUNDATION | COMPLETE |
-| Slice 01 | IMPLEMENTED / VALIDATED / IN_REVIEW / NOT MERGED / NOT COMPLETE |
+| Slice 01 | COMPLETE / MERGED / POST-MERGE VALIDATED |
 | Real data | NOT AUTHORIZED |
 | Pilot | NOT AUTHORIZED |
 | Slice 02 | NOT STARTED / NOT AUTHORIZED |
@@ -28,8 +28,9 @@
 - Human final authority: LEANDRO.
 - Orchestrator: MESTRE.
 - HUMAN_GATE belongs exclusively to LEANDRO.
+- LEANDRO explicitly authorized merge and formal completion of Slice 01 on `2026-08-17`.
+- Green CI alone did not authorize merge; integration occurred only after the governed review, independent audit, LÉO gate and HUMAN_GATE.
 - Repository state is canonical when it can answer the project-state question.
-- A green CI does not itself authorize merge, completion, real data, pilot or the next slice.
 
 ## FOUNDATION completion evidence
 
@@ -38,35 +39,33 @@
 - Post-merge `main` CI run `31936579159`: PASS.
 - Evidence: `docs/evidence/foundation/FOUNDATION-EVIDENCE-001.md`.
 
-## SLICE 01 authorization
+## SLICE 01 completion evidence
 
-- HUMAN_GATE to enter Slice 01: APPROVED by LEANDRO on `2026-08-16`.
 - Approved approach: `A — Deterministic Textual Fact`.
-- Design approval: APPROVED by LEANDRO.
-- Written spec approval: APPROVED by LEANDRO.
-- Execution mode: inline execution selected by LEANDRO.
-- Design: `docs/superpowers/specs/2026-08-16-slice-01-trusted-text-memory-design.md`.
-- Plan: `docs/superpowers/plans/2026-08-16-slice-01-trusted-text-memory-implementation.md`.
-
-## SLICE 01 implementation evidence
-
-- Branch: `slice/01-trusted-text-memory`.
-- PR #2: OPEN / NOT MERGED.
-- Reviewed code HEAD: `07a41381f7bc47d9f048f90f3b36fcc6f85e03d1`.
-- Canonical reviewed-code CI run `31939889153` / job `95147424876`: PASS.
+- Branch final HEAD: `47b7c6bacd5f0d74a184a61ea5ae5d7f94401c5f`.
+- PR #2: CLOSED / MERGED.
+- Merge commit: `65a3100d86b111e10e696f086ea39a448bb1c05a`.
+- Validated product-code HEAD: `de8185ed1a152c12828bee02a4c8acc3398a6d7d`.
+- Canonical product-code CI: `31972155005` / job `95226131010` — PASS.
+- Final branch CI: `31972682881` / job `95227446058` — PASS.
+- Post-merge `main` CI: `31991656625` / job `95276180583` — PASS.
+- Automated tests: 53/53 PASS.
+- Browser E2E: 2/2 PASS.
 - Evidence: `docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md`.
+- Independent audit: `docs/audits/SLICE-01-INDEPENDENT-MCF-AUDIT-001.md` — `PASS_FOR_GATE`.
 - PRF: `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/`.
-- MESTRE technical review: 2 Important findings found and fixed.
 - Open Critical findings: `0`.
 - Open Important findings: `0`.
-- Independent MCF audit: not simulated; remains a gate input.
+- Open review threads: `0`.
+- LÉO gate: PASS.
+- HUMAN_GATE: APPROVED by LEANDRO.
 
 ## Current boundary
 
-Slice 01 implementation and validation are ready to enter the governed gate process. Slice 01 is not complete and PR #2 is not authorized to merge by this state.
+Slice 01 is complete and integrated. Its delivered behavior remains the deterministic trusted-text boundary only.
 
-Real sensitive data remains prohibited. Pilot and Slice 02 remain blocked.
+Real sensitive data remains prohibited. Pilot remains unauthorized. Slice 02 remains not started and unauthorized. No AI, embeddings, voice, offline, sync, corrections/history, purge or future-slice capability is implied by Slice 01 completion.
 
 ## Next action
 
-Perform the Slice 01 gate process, including the required independent MCF audit/gate inputs. Do not merge, mark `COMPLETE`, use real sensitive data or start Slice 02 without the applicable gate decision.
+No product implementation action is currently authorized. The next governed product step is to define and authorize the next boundary before starting Slice 02.

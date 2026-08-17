@@ -4,18 +4,21 @@
 
 - Mission: `MDP-001 — Memória Digital Pessoal`
 - Boundary: `SLICE 01 — Trusted Text Memory`
-- Date: `2026-08-16`
-- Branch: `slice/01-trusted-text-memory`
+- Initial evidence date: `2026-08-16`
+- Closeout date: `2026-08-17`
 - Pull request: `#2 — SLICE 01: trusted text memory`
+- Final branch HEAD: `47b7c6bacd5f0d74a184a61ea5ae5d7f94401c5f`
+- Merge commit: `65a3100d86b111e10e696f086ea39a448bb1c05a`
 - Validated product-code HEAD: `de8185ed1a152c12828bee02a4c8acc3398a6d7d`
 - Canonical product-code CI: `31972155005` / job `95226131010`
+- Post-merge `main` CI: `31991656625` / job `95276180583`
 - Evidence classification: laboratory / synthetic data only
 
 ## Result
 
-`IN_REVIEW / READY_FOR_GATE`
+`COMPLETE / ENTREGUE / MERGED / POST-MERGE VALIDATED`
 
-This record proves implementation, remediation, validation and independent-audit readiness. It does not authorize merge, mark Slice 01 complete, permit real sensitive data, pilot, or authorize Slice 02.
+This record proves the Slice 01 implementation, remediation, validation, review, independent audit, human authorization, integration and post-merge verification. Completion does not permit real sensitive data, pilot or Slice 02.
 
 ## Acceptance evidence
 
@@ -30,17 +33,17 @@ This record proves implementation, remediation, validation and independent-audit
 | 7 | FOUND carries provenance | Service/controller/component/E2E linkage | PASS |
 | 8 | No match returns explicit `UNKNOWN` | Contract, service, component and browser tests | PASS |
 | 9 | Forced persistence failure leaves no partial state | Late `current_facts` failure inside real PostgreSQL transaction | PASS |
-| 10 | Unit, integration, architecture and browser E2E pass | Canonical CI `31972155005` | PASS |
+| 10 | Unit, integration, architecture and browser E2E pass | Canonical CI `31972155005` and post-merge CI `31991656625` | PASS |
 | 11 | Foundation regressions remain green | Health/readiness, Foundation E2E and outage proof | PASS |
 | 12 | Only synthetic, non-sensitive data is used | Synthetic fixtures and explicit laboratory warning | PASS |
 | 13 | No out-of-scope AI/infrastructure enters Slice 01 | Architecture scope test and dependency boundary | PASS |
-| 14 | Evidence, review, CI and gate are complete before merge | Evidence/review/CI/audit are gate-ready; merge remains blocked pending governed gate | PASS FOR GATE READINESS |
+| 14 | Evidence, review, CI and gate are complete before merge | Review/audit/gates completed; HUMAN_GATE approved; PR #2 merged; post-merge CI passed | PASS |
 
 ## Post-review defect and TDD remediation
 
 Codex identified a P2 defect after the original gate-readiness checkpoint: Prisma connection-capacity errors `P2024` and `P2037` were not classified as persistence unavailability and could escape as generic HTTP 500 responses.
 
-The finding was independently reproduced before production code was changed:
+The finding was reproduced before production code was changed:
 
 - RED test-only commit: `b5199578a570ed13e49be92464e1e14d0ca2eb6c`.
 - RED CI `31972074965` / job `95225939147`: both new regression tests failed; all 51 pre-existing tests passed.
@@ -63,28 +66,38 @@ ledger_events
 memories
 ```
 
-Canonical CI proves migrations, exact table allowlist, atomic rollback, literal parameterized retrieval, safe `SERVICE_UNAVAILABLE` responses, and no submitted-content/SQL leakage during the database-outage proof.
+Canonical and post-merge CI prove migrations, exact table allowlist, atomic rollback, literal parameterized retrieval, safe `SERVICE_UNAVAILABLE` responses, and no submitted-content/SQL leakage during the database-outage proof.
 
-## Review and audit evidence
+## Review, audit and gate evidence
 
-MESTRE technical review previously fixed:
+MESTRE technical review fixed:
+
 1. Important — synthetic-only restriction missing from the functional UI.
 2. Important — web copy drift from the approved plan.
 3. Validation defect — ambiguous Playwright selector after exact copy alignment.
 
 Post-review Codex P2:
+
 4. Connection-pool exhaustion (`P2024`/`P2037`) not mapped to service unavailable — FIXED and regression-tested.
 
-Current review state:
+Final review state:
+
 - Open Critical findings: `0`.
 - Open Important findings: `0`.
 - Open review threads: `0`.
 
 Independent MCF audit:
+
 - Auditor role: Emily.
 - Artifact: `docs/audits/SLICE-01-INDEPENDENT-MCF-AUDIT-001.md`.
-- Verdict: `PASS_FOR_GATE`.
-- Merge authorization: `NOT GRANTED`.
+- Verdict at audit time: `PASS_FOR_GATE`.
+
+Gate sequence after audit:
+
+- LÉO internal gate: PASS.
+- HUMAN_GATE: explicitly APPROVED by LEANDRO on `2026-08-17`.
+- PR #2 merge: SUCCESS at `65a3100d86b111e10e696f086ea39a448bb1c05a`.
+- Post-merge `main` CI `31991656625`: PASS.
 
 ## Known limitations and safety boundary
 
@@ -94,6 +107,6 @@ Independent MCF audit:
 - Slice 02 remains unauthorized.
 - GitHub Actions logs retain the maintenance warning that `actions/checkout@v4` and `actions/setup-node@v4` target the deprecated Node 20 action runtime and are forced by the runner to Node 24.
 
-## Gate boundary
+## Closeout boundary
 
-Evidence is sufficient to enter the governed Slice 01 gate. PR #2 must remain unmerged until the applicable internal gate and HUMAN_GATE authorize integration.
+Slice 01 is complete and integrated. This closeout does not authorize any next-slice or sensitive-data boundary.

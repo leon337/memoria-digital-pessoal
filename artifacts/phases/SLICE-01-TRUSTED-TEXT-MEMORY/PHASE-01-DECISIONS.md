@@ -18,11 +18,11 @@ LEANDRO selected inline execution.
 
 ## 2026-08-16 — CI execution adaptation
 
-Because this interface manipulates the repository through the GitHub connector rather than a local worktree, PR #2 was opened in draft before implementation solely to expose pull-request CI. Temporary branch-only workflows were allowed only for constrained lockfile/format repairs and were removed immediately after use.
+Because this interface manipulates the repository through the GitHub connector rather than a local worktree, PR #2 was opened before implementation to expose pull-request CI. Temporary branch-only workflows were constrained to repair tasks and removed after use.
 
 ## 2026-08-16 — Rollback-test correction
 
-MESTRE rejected the plan's duplicate-PK rollback injection as the final test mechanism because a constraint violation is not database unavailability. A temporary PostgreSQL trigger now fails the final projection insert and proves full transaction rollback without corrupting outage classification.
+MESTRE rejected the plan's duplicate-PK rollback injection as the final test mechanism because a constraint violation is not database unavailability. A temporary PostgreSQL trigger fails the final projection insert and proves full transaction rollback without corrupting outage classification.
 
 Classification: `REQUIRED_FOR_ACCEPTANCE`.
 
@@ -42,17 +42,62 @@ Decision: align copy before gate readiness.
 
 Result: fixed by `ec9e78128e19742ba856fc5d95df014229a934c3` and covered by component/E2E tests.
 
-## 2026-08-16 — Final technical review
+## 2026-08-16 — Post-review P2 finding
 
-Reviewed code HEAD: `07a41381f7bc47d9f048f90f3b36fcc6f85e03d1`.
+Codex identified that Prisma `P2024` and `P2037` connection-capacity failures were not classified as persistence unavailability.
 
-MESTRE review result:
+Decision: reproduce by TDD before changing production code.
 
-- Critical open: `0`
-- Important open: `0`
+Evidence:
 
-This is not represented as Emily's independent MCF audit. Independent audit remains an input to the governed gate.
+- RED test-only commit: `b5199578a570ed13e49be92464e1e14d0ca2eb6c`;
+- RED CI: `31972074965` / job `95225939147` — two new tests failed while 51 existing tests passed;
+- minimal fix commit: `de8185ed1a152c12828bee02a4c8acc3398a6d7d`;
+- GREEN CI: `31972155005` / job `95226131010` — 53/53 tests, build and E2E passed.
 
-## 2026-08-16 — Integration boundary
+Result: finding fixed and review thread resolved.
 
-No merge is authorized by implementation or green CI. Real sensitive data remains prohibited. Slice 02 remains unauthorized.
+## 2026-08-16 — Independent audit
+
+Emily performed the independent MCF audit after remediation.
+
+Artifact: `docs/audits/SLICE-01-INDEPENDENT-MCF-AUDIT-001.md`.
+
+Decision: `PASS_FOR_GATE`.
+
+## 2026-08-16 — LÉO internal gate
+
+Inputs: completed implementation, PRF, fresh CI, resolved findings, independent audit and zero open Critical/Important findings.
+
+Decision: PASS and escalate to HUMAN_GATE.
+
+## 2026-08-17 — HUMAN_GATE
+
+LEANDRO explicitly authorized:
+
+- merge of PR #2 into `main`;
+- formal completion of Slice 01 after post-merge verification.
+
+The authorization explicitly does not cover real sensitive data, pilot or Slice 02.
+
+Decision: `APPROVED`.
+
+## 2026-08-17 — Integration
+
+PR #2 was merged with merge method `merge` to preserve the RED/GREEN, review and PRF history.
+
+Merge commit: `65a3100d86b111e10e696f086ea39a448bb1c05a`.
+
+Result: SUCCESS.
+
+## 2026-08-17 — Post-merge validation
+
+`main` CI `31991656625` / job `95276180583` completed successfully across migrations, exact schema boundary, typecheck, lint, format, PRF manifest, 53 tests, build, 2 E2E tests and real PostgreSQL outage degradation.
+
+Decision: close Slice 01 as `ENTREGUE / COMPLETE`.
+
+## Residual authorization boundary
+
+- Real sensitive data: `NOT AUTHORIZED`.
+- Pilot: `NOT AUTHORIZED`.
+- Slice 02: `NOT STARTED / NOT AUTHORIZED`.

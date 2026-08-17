@@ -2,16 +2,26 @@ mission_id: MDP-001
 phase_id: SLICE-01
 title: Trusted Text Memory
 risk_class: B
-state: IN_REVIEW_READY_FOR_GATE
-branch: slice/01-trusted-text-memory
+state: ENTREGUE
+phase_complete: true
 pull_request:
   number: 2
-  state: OPEN
-  merged: false
+  state: CLOSED
+  merged: true
+  merge_commit: 65a3100d86b111e10e696f086ea39a448bb1c05a
+final_branch_head: 47b7c6bacd5f0d74a184a61ea5ae5d7f94401c5f
 validated_product_code_head: de8185ed1a152c12828bee02a4c8acc3398a6d7d
 canonical_product_code_ci:
   run_id: 31972155005
   job_id: 95226131010
+  conclusion: success
+final_branch_ci:
+  run_id: 31972682881
+  job_id: 95227446058
+  conclusion: success
+post_merge_main_ci:
+  run_id: 31991656625
+  job_id: 95276180583
   conclusion: success
 tdd_remediation:
   finding: prisma_pool_exhaustion_availability_mapping
@@ -28,6 +38,8 @@ findings:
 data_boundary:
   synthetic_only: true
   real_sensitive_data_authorized: false
+pilot:
+  authorized: false
 next_slice:
   slice_02_authorized: false
 evidence:
@@ -39,7 +51,15 @@ audit:
   mestre_technical_review: completed
   independent_mcf_audit: completed_pass_for_gate
   independent_audit_simulated: false
-merge_authorized: false
+gates:
+  leo_internal_gate: pass
+  human_gate:
+    authority: LEANDRO
+    decision: approved
+    date: 2026-08-17
+merge_authorized: true
+merge_authorization_consumed: true
 blockers: []
-next_action: LEO internal gate, then HUMAN_GATE to LEANDRO before merge
-checkpoint_recipient: LEO internal gate
+human_action_required: false
+next_action: none_for_slice_01
+checkpoint_recipient: MDP mission-level planning boundary
