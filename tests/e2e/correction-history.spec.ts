@@ -56,7 +56,7 @@ test('corrects text, preserves history and restores an old version by appending 
     'Minha irmã sintética se chama Ana.',
   );
   await page.getByRole('button', { name: 'Salvar correção' }).click();
-  await expect(page.getByText('Minha irmã sintética se chama Ana.')).toBeVisible();
+  await expect(page.locator('.recorded-memory')).toHaveText('Minha irmã sintética se chama Ana.');
 
   await page.getByRole('button', { name: 'Ver histórico' }).click();
   const restoredHistory = page.getByRole('region', { name: 'Histórico da lembrança' });
