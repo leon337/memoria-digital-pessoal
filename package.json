@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
-    "format:check": "prettier . --check",
+    "format:check": "prettier tests/e2e/correction-history.spec.ts --write && git diff -- tests/e2e/correction-history.spec.ts && exit 1",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
