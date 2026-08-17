@@ -47,10 +47,12 @@ describe('mdp-local IndexedDB schema', () => {
 
     const v2 = await openMdpLocalDatabase(factory);
 
-    expect(
-      v2.transaction('evidence').objectStore('evidence').indexNames.contains('memoryId'),
-    ).toBe(true);
-    expect(v2.transaction('facts').objectStore('facts').index('supersedesFactId').unique).toBe(true);
+    expect(v2.transaction('evidence').objectStore('evidence').indexNames.contains('memoryId')).toBe(
+      true,
+    );
+    expect(v2.transaction('facts').objectStore('facts').index('supersedesFactId').unique).toBe(
+      true,
+    );
     expect(
       v2.transaction('currentFacts').objectStore('currentFacts').index('memoryId').unique,
     ).toBe(false);
