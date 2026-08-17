@@ -4,7 +4,7 @@
 
 **Goal:** Deliver end-to-end correction and immutable history for deterministic textual memories while preserving original evidence, provenance, current-only normal retrieval, atomicity, and stale-write protection.
 
-**Architecture:** Extend the existing five-model Slice 01 persistence shape rather than introducing a version aggregate or event-sourced rewrite. Corrections append immutable Evidence, Fact, and `MEMORY_CORRECTED` LedgerEvent rows, link each Fact to its predecessor, and atomically reproject the existing CurrentFact under a per-memory PostgreSQL row lock. The PWA reuses the existing `FOUND` query result as the correction/history entry point.
+**Architecture:** Keep the existing five-model Slice 01 architecture. A correction appends immutable Evidence, Fact, and `MEMORY_CORRECTED` LedgerEvent rows, links the new Fact to the immediately previous Fact, and atomically reprojects the existing CurrentFact while holding a PostgreSQL lock on the stable Memory row. History is reconstructed from explicit Fact predecessor links; the PWA exposes correction/history only from an existing `FOUND` query result.
 
 **Tech Stack:** Node.js 24, TypeScript 6, pnpm 10.34.0, React, Vite, NestJS, Prisma, PostgreSQL, Zod, Vitest, Testing Library, Supertest, Playwright, Docker Compose, GitHub Actions.
 
@@ -12,88 +12,85 @@
 
 ## Global Constraints
 
-- **Do not execute this plan until LEANDRO explicitly authorizes Slice 02 implementation.** Approval of this plan/spec is not implementation authorization.
-- Use only synthetic laboratory data. Real sensitive data and pilot activity remain unauthorized.
-- Branch execution from the latest validated `main` using `slice/02-correction-history`; create an isolated worktree at execution time with `superpowers:using-git-worktrees`.
-- Preserve exactly the existing five Prisma product models: `Memory`, `Evidence`, `LedgerEvent`, `Fact`, `CurrentFact`.
-- Add no Redis, BullMQ, worker, pgvector, object storage, AI provider, STT/TTS, offline storage, service worker, synchronization, authentication, purge, or other future-slice infrastructure.
-- Add no runtime dependency unless a separately approved blocker proves it is required. This plan requires none.
-- Correction text normalization is exactly `input.text.trim()`; accepted length is 1–4000 characters.
-- Optional reason normalization is exactly `input.reason?.trim()`; empty becomes null/absent; non-empty maximum is 500 characters.
-- Normal memory query continues to search only `current_facts` and returns only the current version.
-- `CurrentFact.recordedAt` remains the original memory recording timestamp after correction.
-- Every accepted correction creates a new Evidence, a new Fact, and a new `MEMORY_CORRECTED` LedgerEvent; historical rows are never overwritten.
-- Every correction Fact has `supersedesFactId = immediately previous current fact ID`.
-- `facts.supersedes_fact_id` is unique when non-null, preventing persisted history forks.
-- `MEMORY_CORRECTED` stores explicit `fact_id`, `supersedes_fact_id`, and optional `reason` columns on `ledger_events`; do not introduce a generic JSON event payload.
-- Correction transactions serialize per memory using a lock on the stable `memories` row (`SELECT ... FOR UPDATE`) before the stale-current check.
-- Evidence + Fact + LedgerEvent + CurrentFact reprojection commit atomically or all roll back.
-- A stale `expectedCurrentFactId` returns HTTP 409 / `STALE_CORRECTION`; no auto-retry or overwrite.
-- A no-change correction returns HTTP 422 / `NO_CHANGE`; blank/invalid input returns HTTP 422 for the new correction endpoint.
-- PostgreSQL unavailability continues to map to safe HTTP 503 / `SERVICE_UNAVAILABLE`, without leaking SQL or memory content.
-- Use TDD for every behavior change: failing test → prove RED → minimal implementation → prove GREEN → focused commit.
-- Existing Slice 01 tests and architectural invariants remain cumulative regression requirements.
+- **Do not execute this plan until LEANDRO explicitly authorizes Slice 02 implementation.** Spec/plan approval is not implementation authorization.
+- Use synthetic laboratory data only. Real sensitive data and pilot remain unauthorized.
+- At execution time create an isolated worktree from fresh validated `main` and branch `slice/02-correction-history` using `superpowers:using-git-worktrees`.
+- Preserve exactly five Prisma product models/tables: `Memory`, `Evidence`, `LedgerEvent`, `Fact`, `CurrentFact`.
+- Add no Redis, BullMQ, worker, pgvector, object storage, AI provider, STT/TTS, IndexedDB/offline, sync, passkeys, purge, or future-slice infrastructure.
+- Add no new runtime dependency; none is required by this boundary.
+- Correction normalization is exactly `input.text.trim()`; accepted normalized length is 1–4000.
+- Optional reason normalization is `input.reason?.trim()`; empty becomes null; non-empty max is 500.
+- Normal query continues to read only `current_facts`; superseded text never appears in ordinary search.
+- `CurrentFact.recordedAt` remains the original memory recording timestamp after every correction.
+- Every accepted correction appends one new Evidence, one new Fact, and one new `MEMORY_CORRECTED` event.
+- `Fact.supersedesFactId` points to the immediately previous current fact and is unique when non-null.
+- `MEMORY_CORRECTED` uses explicit `fact_id`, `supersedes_fact_id`, and `reason` columns; no JSON event payload.
+- Correction transactions lock the Memory row with `SELECT ... FOR UPDATE` before checking `expectedCurrentFactId`.
+- Evidence + Fact + LedgerEvent + CurrentFact reprojection commit together or roll back together.
+- Stale correction: HTTP 409 / `STALE_CORRECTION`, no retry/overwrite.
+- No-change: HTTP 422 / `NO_CHANGE`, no persistent records.
+- Correction request validation failure: HTTP 422 / `VALIDATION_FAILED`.
+- PostgreSQL unavailability: HTTP 503 / `SERVICE_UNAVAILABLE`, with no SQL/content leak.
+- Every behavior change follows RED → prove RED → minimal GREEN → prove GREEN → focused commit.
+- Slice 01 tests, E2E, outage behavior, literal search semantics, five-model boundary, and forbidden-dependency checks remain cumulative regression contracts.
 
 ---
 
-## File Structure Map
+## File Structure
 
-### New focused files
+### Create
 
-- `packages/domain/src/correction.ts` — pure correction construction, normalization, domain errors, and deterministic history ordering.
-- `packages/domain/src/correction.test.ts` — correction/history invariant tests.
-- `packages/contracts/src/correction.ts` — Zod request/response/history schemas and exported types.
-- `packages/contracts/src/correction.test.ts` — correction/history contract tests.
-- `apps/api/src/memories/memory.errors.ts` — application errors `StaleCorrectionError`, `NoChangeCorrectionError`, and `MemoryInvariantError`.
-- `apps/web/src/features/memory/MemoryFoundResult.tsx` — current result, inline correction, history loading/display, stale-result state, and undo-by-append interaction.
-- `apps/web/src/features/memory/MemoryFoundResult.test.tsx` — focused UI behavior tests.
-- `tests/architecture/slice-02-scope.test.ts` — no new models/dependencies/future-slice capabilities plus required correction constraints.
-- `tests/e2e/correction-history.spec.ts` — browser proof of correction, history, current-only retrieval, and undo-by-append.
-- `prisma/migrations/20260817000100_slice_02_correction_history/migration.sql` — Slice 02 schema evolution.
-- `docs/phases/SLICE-02.md` — governed boundary state during execution and final gate preparation.
-- `docs/evidence/slice-02/SLICE-02-EVIDENCE-001.md` — reproducible acceptance evidence.
-- `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-PLAN.md`
-- `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-VALIDATION.txt`
-- `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-VALIDATION-FULL.txt`
-- `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-SMOKE.txt`
-- `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-REPORT.md`
-- `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-CHECKPOINT.yaml`
-- `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-DECISIONS.md`
-- `artifacts/phases/SLICE-02-CORRECTION-HISTORY/README.md`
-- `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-ARTIFACT-MANIFEST.sha256`
+- `packages/domain/src/correction.ts`
+- `packages/domain/src/correction.test.ts`
+- `packages/contracts/src/correction.ts`
+- `packages/contracts/src/correction.test.ts`
+- `packages/contracts/src/api-error.ts`
+- `packages/contracts/src/api-error.test.ts`
+- `apps/api/src/memories/memory.errors.ts`
+- `prisma/migrations/20260817000100_slice_02_correction_history/migration.sql`
+- `tests/architecture/slice-02-scope.test.ts`
+- `apps/web/src/features/memory/MemoryFoundResult.tsx`
+- `apps/web/src/features/memory/MemoryFoundResult.test.tsx`
+- `tests/e2e/correction-history.spec.ts`
+- `docs/phases/SLICE-02.md`
+- `docs/evidence/slice-02/SLICE-02-EVIDENCE-001.md`
+- `artifacts/phases/SLICE-02-CORRECTION-HISTORY/*` PRF files listed in Task 8.
 
-### Existing files to modify
+### Modify
 
-- `packages/domain/src/index.ts` — export correction/history domain API.
-- `packages/contracts/src/index.ts` — export correction/history schemas/types/constants.
-- `prisma/schema.prisma` — Fact self-link and correction-specific LedgerEvent columns/relations.
-- `apps/api/src/memories/memory.store.ts` — correction/history store contracts and result types.
-- `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.ts` — locked atomic correction and history reads.
-- `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts` — PostgreSQL atomicity/concurrency/history proofs.
-- `apps/api/src/memories/memory.service.ts` / `.test.ts` — correction/history orchestration and response mapping.
-- `apps/api/src/memories/memory.controller.ts` / `.test.ts` — correction/history endpoints and deterministic HTTP semantics.
-- `apps/api/src/common/http/api-error.ts` — add stable `STALE_CORRECTION` and `NO_CHANGE` codes.
-- `apps/api/src/common/http/api-error.filter.ts` / `.test.ts` — preserve explicit codes for 409/422.
-- `apps/web/src/lib/memory-api.ts` / `.test.ts` — correction/history calls and parsed error code.
-- `apps/web/src/features/memory/QueryMemoryForm.tsx` / `.test.tsx` — delegate a `FOUND` result to `MemoryFoundResult` and accept current-result updates.
-- `.github/workflows/ci.yml` — add Slice 02 constraint checks, correction outage proof, and final PRF verification without removing Slice 01 checks.
-- `docs/STATE.md` / `docs/MDP-RESUME-CARD.md` — only during authorized execution/gate transitions; never mark Slice 02 complete before gate/merge evidence exists.
+- `packages/domain/src/index.ts`
+- `packages/contracts/src/index.ts`
+- `prisma/schema.prisma`
+- `apps/api/src/memories/memory.store.ts`
+- `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.ts`
+- `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts`
+- `apps/api/src/memories/memory.service.ts`
+- `apps/api/src/memories/memory.service.test.ts`
+- `apps/api/src/memories/memory.controller.ts`
+- `apps/api/src/memories/memory.controller.test.ts`
+- `apps/api/src/common/http/api-error.ts`
+- `apps/api/src/common/http/api-error.filter.ts`
+- `apps/api/src/common/http/api-error.filter.test.ts`
+- `apps/web/src/lib/memory-api.ts`
+- `apps/web/src/lib/memory-api.test.ts`
+- `apps/web/src/features/memory/QueryMemoryForm.tsx`
+- `apps/web/src/features/memory/QueryMemoryForm.test.tsx`
+- `apps/web/src/index.css`
+- `.github/workflows/ci.yml`
+- `docs/STATE.md` and `docs/MDP-RESUME-CARD.md` only during authorized execution/gate transitions.
 
 ---
 
-### Task 1: Pure domain correction and deterministic history
+### Task 1: Pure correction domain + deterministic history
 
 **Files:**
 - Create: `packages/domain/src/correction.ts`
 - Create: `packages/domain/src/correction.test.ts`
 - Modify: `packages/domain/src/index.ts`
 
-**Interfaces:**
-- Consumes current fact identity/content/timestamp plus new correction text/reason and generated IDs.
-- Produces `createTextCorrectionRecord`, `orderTextFactHistory`, `CorrectionDomainError`, `TextCorrectionRecord`, and `TextFactHistoryNode`.
-- No Prisma/Nest/React imports are allowed in `packages/domain`.
+**Produces:** `CorrectionDomainError`, `createTextCorrectionRecord`, `orderTextFactHistory`, and their types. Domain remains free of Prisma/Nest/React.
 
-- [ ] **Step 1: Write RED tests for normalization, immutable successor construction, no-change, reason limit, and history order**
+- [ ] **Step 1: Write the RED domain tests**
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -103,83 +100,101 @@ import {
   orderTextFactHistory,
 } from './correction.js';
 
-const correctedAt = new Date('2026-08-17T05:00:00.000Z');
 const recordedAt = new Date('2026-08-16T09:00:00.000Z');
+const correctedAt = new Date('2026-08-17T05:00:00.000Z');
+const previous = {
+  factId: 'fact-1',
+  evidenceId: 'evidence-1',
+  content: 'Texto atual.',
+  recordedAt,
+};
+const ids = { evidenceId: 'evidence-2', eventId: 'event-2', factId: 'fact-2' };
 
-it('creates a full-text immutable correction and preserves recordedAt', () => {
+it('creates a normalized append-only correction and preserves recordedAt', () => {
   const record = createTextCorrectionRecord({
-    memoryId: 'memory-id',
-    previous: {
-      factId: 'fact-1',
-      evidenceId: 'evidence-1',
-      content: 'Texto original.',
-      recordedAt,
-    },
+    memoryId: 'memory-1',
+    previous,
     text: '  Texto corrigido.  ',
-    reason: '  informação corrigida  ',
+    reason: '  ajuste factual  ',
     correctedAt,
-    ids: { evidenceId: 'evidence-2', eventId: 'event-2', factId: 'fact-2' },
+    ids,
   });
-
   expect(record.evidence.content).toBe('Texto corrigido.');
   expect(record.fact.supersedesFactId).toBe('fact-1');
-  expect(record.event.type).toBe('MEMORY_CORRECTED');
-  expect(record.event.factId).toBe('fact-2');
-  expect(record.event.supersedesFactId).toBe('fact-1');
-  expect(record.event.reason).toBe('informação corrigida');
+  expect(record.event).toMatchObject({
+    type: 'MEMORY_CORRECTED',
+    factId: 'fact-2',
+    supersedesFactId: 'fact-1',
+    reason: 'ajuste factual',
+  });
   expect(record.currentFact.recordedAt).toBe(recordedAt);
 });
 
-it('rejects empty and no-change corrections', () => {
-  const base = {
-    memoryId: 'memory-id',
-    previous: {
-      factId: 'fact-1',
-      evidenceId: 'evidence-1',
-      content: 'Texto atual.',
-      recordedAt,
-    },
-    correctedAt,
-    ids: { evidenceId: 'evidence-2', eventId: 'event-2', factId: 'fact-2' },
-  } as const;
-
-  expect(() => createTextCorrectionRecord({ ...base, text: '   ' })).toThrow(
-    expect.objectContaining<Partial<CorrectionDomainError>>({ code: 'EMPTY_CORRECTION' }),
-  );
-  expect(() => createTextCorrectionRecord({ ...base, text: ' Texto atual. ' })).toThrow(
-    expect.objectContaining<Partial<CorrectionDomainError>>({ code: 'NO_CHANGE' }),
-  );
+it.each([
+  ['   ', 'EMPTY_CORRECTION'],
+  ['x'.repeat(4001), 'TEXT_TOO_LONG'],
+  [' Texto atual. ', 'NO_CHANGE'],
+] as const)('rejects invalid text %s with %s', (text, code) => {
+  expect(() =>
+    createTextCorrectionRecord({ memoryId: 'memory-1', previous, text, correctedAt, ids }),
+  ).toThrow(expect.objectContaining<Partial<CorrectionDomainError>>({ code }));
 });
 
-it('orders an explicit predecessor chain and marks root/current', () => {
+it('rejects an oversized normalized reason', () => {
+  expect(() =>
+    createTextCorrectionRecord({
+      memoryId: 'memory-1',
+      previous,
+      text: 'Novo texto.',
+      reason: 'x'.repeat(501),
+      correctedAt,
+      ids,
+    }),
+  ).toThrow(expect.objectContaining<Partial<CorrectionDomainError>>({ code: 'REASON_TOO_LONG' }));
+});
+
+it('orders the explicit chain root-to-tip independent of array/timestamp order', () => {
   const ordered = orderTextFactHistory(
     [
-      { factId: 'fact-3', evidenceId: 'e3', content: 'C', createdAt: correctedAt, supersedesFactId: 'fact-2' },
-      { factId: 'fact-1', evidenceId: 'e1', content: 'A', createdAt: recordedAt, supersedesFactId: null },
-      { factId: 'fact-2', evidenceId: 'e2', content: 'B', createdAt: correctedAt, supersedesFactId: 'fact-1' },
+      { factId: 'f3', evidenceId: 'e3', content: 'C', createdAt: correctedAt, supersedesFactId: 'f2' },
+      { factId: 'f1', evidenceId: 'e1', content: 'A', createdAt: recordedAt, supersedesFactId: null },
+      { factId: 'f2', evidenceId: 'e2', content: 'B', createdAt: correctedAt, supersedesFactId: 'f1' },
     ],
-    'fact-3',
+    'f3',
   );
-
-  expect(ordered.map((item) => item.factId)).toEqual(['fact-1', 'fact-2', 'fact-3']);
+  expect(ordered.map((item) => item.factId)).toEqual(['f1', 'f2', 'f3']);
   expect(ordered[0]).toMatchObject({ isOriginal: true, isCurrent: false });
   expect(ordered[2]).toMatchObject({ isOriginal: false, isCurrent: true });
 });
+
+it('rejects broken or forked history', () => {
+  expect(() =>
+    orderTextFactHistory(
+      [
+        { factId: 'f1', evidenceId: 'e1', content: 'A', createdAt: recordedAt, supersedesFactId: null },
+        { factId: 'f2', evidenceId: 'e2', content: 'B', createdAt: correctedAt, supersedesFactId: 'f1' },
+        { factId: 'f3', evidenceId: 'e3', content: 'C', createdAt: correctedAt, supersedesFactId: 'f1' },
+      ],
+      'f3',
+    ),
+  ).toThrow(expect.objectContaining<Partial<CorrectionDomainError>>({ code: 'BROKEN_HISTORY' }));
+});
 ```
 
-- [ ] **Step 2: Run the new domain test and prove RED**
+- [ ] **Step 2: Prove RED**
 
 ```bash
 pnpm exec vitest run packages/domain/src/correction.test.ts
 ```
 
-Expected: FAIL because `correction.ts` and its exports do not exist.
+Expected: FAIL because the correction API does not exist.
 
-- [ ] **Step 3: Implement the pure domain API minimally**
+- [ ] **Step 3: Implement the exact domain shapes and validation**
 
 ```ts
 export type CorrectionDomainErrorCode =
   | 'EMPTY_CORRECTION'
+  | 'TEXT_TOO_LONG'
   | 'NO_CHANGE'
   | 'REASON_TOO_LONG'
   | 'BROKEN_HISTORY';
@@ -206,13 +221,7 @@ export interface CreateTextCorrectionRecordInput {
 }
 
 export interface TextCorrectionRecord {
-  readonly evidence: Readonly<{
-    id: string;
-    memoryId: string;
-    kind: 'text';
-    content: string;
-    createdAt: Date;
-  }>;
+  readonly evidence: Readonly<{ id: string; memoryId: string; kind: 'text'; content: string; createdAt: Date }>;
   readonly fact: Readonly<{
     id: string;
     memoryId: string;
@@ -249,56 +258,54 @@ export interface TextFactHistoryNode {
   readonly supersedesFactId: string | null;
 }
 
-export function createTextCorrectionRecord(
-  input: CreateTextCorrectionRecordInput,
-): TextCorrectionRecord {
-  const content = input.text.trim();
-  if (content.length === 0) throw new CorrectionDomainError('EMPTY_CORRECTION');
-  if (content === input.previous.content.trim()) throw new CorrectionDomainError('NO_CHANGE');
-  const normalizedReason = input.reason?.trim() ?? '';
-  if (normalizedReason.length > 500) throw new CorrectionDomainError('REASON_TOO_LONG');
+export type OrderedTextFactHistoryNode = TextFactHistoryNode & {
+  readonly isOriginal: boolean;
+  readonly isCurrent: boolean;
+};
+```
 
-  return Object.freeze({
-    evidence: Object.freeze({
-      id: input.ids.evidenceId,
-      memoryId: input.memoryId,
-      kind: 'text' as const,
-      content,
-      createdAt: input.correctedAt,
-    }),
-    fact: Object.freeze({
-      id: input.ids.factId,
-      memoryId: input.memoryId,
-      evidenceId: input.ids.evidenceId,
-      kind: 'autobiographical_statement' as const,
-      content,
-      supersedesFactId: input.previous.factId,
-      createdAt: input.correctedAt,
-    }),
-    event: Object.freeze({
-      id: input.ids.eventId,
-      memoryId: input.memoryId,
-      evidenceId: input.ids.evidenceId,
-      factId: input.ids.factId,
-      supersedesFactId: input.previous.factId,
-      type: 'MEMORY_CORRECTED' as const,
-      reason: normalizedReason.length === 0 ? null : normalizedReason,
-      createdAt: input.correctedAt,
-    }),
-    currentFact: Object.freeze({
-      factId: input.ids.factId,
-      memoryId: input.memoryId,
-      evidenceId: input.ids.evidenceId,
-      content,
-      recordedAt: input.previous.recordedAt,
-    }),
-  });
+`createTextCorrectionRecord` must trim text, enforce 1–4000, compare with `previous.content.trim()`, trim reason and enforce ≤500, create frozen immutable output, and preserve `previous.recordedAt` in CurrentFact.
+
+Implement history traversal exactly with a root + successor map:
+
+```ts
+export function orderTextFactHistory(
+  nodes: readonly TextFactHistoryNode[],
+  currentFactId: string,
+): OrderedTextFactHistoryNode[] {
+  const roots = nodes.filter((node) => node.supersedesFactId === null);
+  if (roots.length !== 1) throw new CorrectionDomainError('BROKEN_HISTORY');
+
+  const successor = new Map<string, TextFactHistoryNode>();
+  for (const node of nodes) {
+    if (node.supersedesFactId === null) continue;
+    if (successor.has(node.supersedesFactId)) throw new CorrectionDomainError('BROKEN_HISTORY');
+    successor.set(node.supersedesFactId, node);
+  }
+
+  const ordered: TextFactHistoryNode[] = [];
+  const visited = new Set<string>();
+  let cursor: TextFactHistoryNode | undefined = roots[0];
+  while (cursor) {
+    if (visited.has(cursor.factId)) throw new CorrectionDomainError('BROKEN_HISTORY');
+    visited.add(cursor.factId);
+    ordered.push(cursor);
+    cursor = successor.get(cursor.factId);
+  }
+
+  if (ordered.length !== nodes.length || ordered.at(-1)?.factId !== currentFactId) {
+    throw new CorrectionDomainError('BROKEN_HISTORY');
+  }
+
+  return ordered.map((node, index) => ({
+    ...node,
+    isOriginal: index === 0,
+    isCurrent: node.factId === currentFactId,
+  }));
 }
 ```
 
-Implement `orderTextFactHistory(nodes, currentFactId)` by requiring exactly one root (`supersedesFactId === null`), exactly one successor per predecessor, no cycle/missing link, all nodes visited once, and final node equal to `currentFactId`; otherwise throw `CorrectionDomainError('BROKEN_HISTORY')`.
-
-- [ ] **Step 4: Export the new domain API from `packages/domain/src/index.ts`**
+- [ ] **Step 4: Export from `packages/domain/src/index.ts`, retaining Slice 01 exports**
 
 ```ts
 export {
@@ -309,22 +316,19 @@ export {
 export type {
   CorrectionDomainErrorCode,
   CreateTextCorrectionRecordInput,
+  OrderedTextFactHistoryNode,
   TextCorrectionRecord,
   TextFactHistoryNode,
 } from './correction.js';
 ```
 
-Keep the existing Slice 01 exports intact.
-
-- [ ] **Step 5: Run focused and cumulative domain tests**
+- [ ] **Step 5: Prove GREEN + Slice 01 domain regression**
 
 ```bash
 pnpm exec vitest run packages/domain/src/correction.test.ts packages/domain/src/memory.test.ts
 ```
 
-Expected: PASS.
-
-- [ ] **Step 6: Commit the domain slice**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add packages/domain/src/correction.ts packages/domain/src/correction.test.ts packages/domain/src/index.ts
@@ -333,31 +337,31 @@ git commit -m "feat(domain): model append-only memory correction"
 
 ---
 
-### Task 2: Correction/history contracts and stable API error codes
+### Task 2: Shared correction/history HTTP contracts and error envelope
 
 **Files:**
 - Create: `packages/contracts/src/correction.ts`
 - Create: `packages/contracts/src/correction.test.ts`
+- Create: `packages/contracts/src/api-error.ts`
+- Create: `packages/contracts/src/api-error.test.ts`
 - Modify: `packages/contracts/src/index.ts`
 - Modify: `apps/api/src/common/http/api-error.ts`
 - Modify: `apps/api/src/common/http/api-error.filter.ts`
 - Modify: `apps/api/src/common/http/api-error.filter.test.ts`
 
-**Interfaces:**
-- Produces `correctMemoryRequestSchema`, `correctMemoryResponseSchema`, `memoryHistoryResponseSchema` and inferred TS types.
-- Produces API codes `STALE_CORRECTION` and `NO_CHANGE` while retaining existing envelope shape `{ error: { code, message, requestId } }`.
+**Produces:** typed request/response/history schemas plus a cross-app API error envelope that both API and web can parse.
 
-- [ ] **Step 1: Write RED contract tests**
+- [ ] **Step 1: Write RED correction contract tests**
 
 ```ts
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import {
   correctMemoryRequestSchema,
   correctMemoryResponseSchema,
   memoryHistoryResponseSchema,
 } from './correction.js';
 
-it('normalizes correction text and optional reason', () => {
+it('normalizes correction request', () => {
   expect(
     correctMemoryRequestSchema.parse({
       text: '  Corrigido.  ',
@@ -371,24 +375,55 @@ it('normalizes correction text and optional reason', () => {
   });
 });
 
-it('rejects blank/oversized correction text and oversized reason', () => {
-  expect(correctMemoryRequestSchema.safeParse({ text: '   ', expectedCurrentFactId: 'id' }).success).toBe(false);
+it('rejects invalid correction request lengths', () => {
+  expect(correctMemoryRequestSchema.safeParse({ text: ' ', expectedCurrentFactId: 'id' }).success).toBe(false);
   expect(correctMemoryRequestSchema.safeParse({ text: 'x'.repeat(4001), expectedCurrentFactId: 'id' }).success).toBe(false);
   expect(correctMemoryRequestSchema.safeParse({ text: 'ok', expectedCurrentFactId: 'id', reason: 'x'.repeat(501) }).success).toBe(false);
 });
+
+it('parses correction response and non-empty history', () => {
+  expect(correctMemoryResponseSchema.parse({
+    memoryId: 'm1',
+    current: {
+      factId: 'f2', evidenceId: 'e2', content: 'B',
+      recordedAt: '2026-08-16T09:00:00.000Z', correctedAt: '2026-08-17T05:00:00.000Z',
+    },
+    correction: { eventId: 'ev2', supersedesFactId: 'f1', reason: null },
+  }).current.factId).toBe('f2');
+
+  expect(memoryHistoryResponseSchema.parse({
+    memoryId: 'm1',
+    versions: [{
+      factId: 'f1', evidenceId: 'e1', content: 'A', createdAt: '2026-08-16T09:00:00.000Z',
+      reason: null, isOriginal: true, isCurrent: true, supersedesFactId: null, eventId: 'ev1',
+    }],
+  }).versions).toHaveLength(1);
+});
 ```
 
-Add response/history parsing tests with the exact fields from the approved spec, including non-empty `versions` checked after parsing in service/controller tests.
+- [ ] **Step 2: Write RED shared error-envelope tests**
 
-- [ ] **Step 2: Prove RED**
+```ts
+import { expect, it } from 'vitest';
+import { apiErrorEnvelopeSchema } from './api-error.js';
+
+it.each(['STALE_CORRECTION', 'NO_CHANGE', 'SERVICE_UNAVAILABLE'] as const)(
+  'parses stable error code %s',
+  (code) => {
+    expect(apiErrorEnvelopeSchema.parse({
+      error: { code, message: 'safe', requestId: 'request-1' },
+    }).error.code).toBe(code);
+  },
+);
+```
+
+- [ ] **Step 3: Prove RED**
 
 ```bash
-pnpm exec vitest run packages/contracts/src/correction.test.ts
+pnpm exec vitest run packages/contracts/src/correction.test.ts packages/contracts/src/api-error.test.ts
 ```
 
-Expected: FAIL because the schemas do not exist.
-
-- [ ] **Step 3: Implement the schemas**
+- [ ] **Step 4: Implement correction schemas**
 
 ```ts
 import { z } from 'zod';
@@ -399,11 +434,7 @@ export const CORRECTION_REASON_MAX_LENGTH = 500;
 export const correctMemoryRequestSchema = z.object({
   text: z.string().transform((value) => value.trim()).pipe(z.string().min(1).max(MEMORY_TEXT_MAX_LENGTH)),
   expectedCurrentFactId: z.string().min(1),
-  reason: z
-    .string()
-    .transform((value) => value.trim())
-    .pipe(z.string().max(CORRECTION_REASON_MAX_LENGTH))
-    .optional(),
+  reason: z.string().transform((value) => value.trim()).pipe(z.string().max(CORRECTION_REASON_MAX_LENGTH)).optional(),
 });
 
 export const correctMemoryResponseSchema = z.object({
@@ -423,15 +454,9 @@ export const correctMemoryResponseSchema = z.object({
 });
 
 export const memoryHistoryVersionSchema = z.object({
-  factId: z.string(),
-  evidenceId: z.string(),
-  content: z.string(),
-  createdAt: z.string(),
-  reason: z.string().nullable(),
-  isOriginal: z.boolean(),
-  isCurrent: z.boolean(),
-  supersedesFactId: z.string().nullable(),
-  eventId: z.string(),
+  factId: z.string(), evidenceId: z.string(), content: z.string(), createdAt: z.string(),
+  reason: z.string().nullable(), isOriginal: z.boolean(), isCurrent: z.boolean(),
+  supersedesFactId: z.string().nullable(), eventId: z.string(),
 });
 
 export const memoryHistoryResponseSchema = z.object({
@@ -445,22 +470,44 @@ export type MemoryHistoryResponse = z.infer<typeof memoryHistoryResponseSchema>;
 export type MemoryHistoryVersion = z.infer<typeof memoryHistoryVersionSchema>;
 ```
 
-- [ ] **Step 4: Export contracts and extend the API error union**
+- [ ] **Step 5: Implement shared error contract**
 
 ```ts
-export type ApiErrorCode =
-  | 'VALIDATION_FAILED'
-  | 'NOT_FOUND'
-  | 'STALE_CORRECTION'
-  | 'NO_CHANGE'
-  | 'INTERNAL_ERROR'
-  | 'SERVICE_UNAVAILABLE';
+import { z } from 'zod';
+
+export const apiErrorCodeSchema = z.enum([
+  'VALIDATION_FAILED',
+  'NOT_FOUND',
+  'STALE_CORRECTION',
+  'NO_CHANGE',
+  'INTERNAL_ERROR',
+  'SERVICE_UNAVAILABLE',
+]);
+
+export const apiErrorEnvelopeSchema = z.object({
+  error: z.object({
+    code: apiErrorCodeSchema,
+    message: z.string(),
+    requestId: z.string(),
+    fields: z.record(z.string(), z.array(z.string())).optional(),
+  }),
+});
+
+export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>;
+export type ApiErrorEnvelope = z.infer<typeof apiErrorEnvelopeSchema>;
 ```
 
-Use a small coded exception helper in `api-error.ts`:
+Export all new contracts from `packages/contracts/src/index.ts`.
+
+- [ ] **Step 6: Make API error transport use the shared type and coded exception**
+
+`apps/api/src/common/http/api-error.ts`:
 
 ```ts
+import type { ApiErrorCode, ApiErrorEnvelope } from '@mdp/contracts';
 import { HttpException } from '@nestjs/common';
+
+export type { ApiErrorCode, ApiErrorEnvelope };
 
 export class CodedHttpException extends HttpException {
   constructor(
@@ -473,56 +520,56 @@ export class CodedHttpException extends HttpException {
 }
 ```
 
-Teach `ApiErrorFilter` to detect `CodedHttpException` before generic `HttpException` and emit its `code`/`safeMessage` without leaking causes.
+In `ApiErrorFilter`, handle `CodedHttpException` before generic `HttpException` and emit its exact code/message/requestId. Add filter tests for 409 `STALE_CORRECTION` and 422 `NO_CHANGE`, while preserving existing 400/404/503 tests.
 
-- [ ] **Step 5: Add filter tests for 409/422 codes and run focused tests**
+- [ ] **Step 7: Prove GREEN**
 
 ```bash
 pnpm build:packages
-pnpm exec vitest run packages/contracts/src/correction.test.ts apps/api/src/common/http/api-error.filter.test.ts
+pnpm exec vitest run packages/contracts/src/correction.test.ts packages/contracts/src/api-error.test.ts apps/api/src/common/http/api-error.filter.test.ts
 ```
 
-Expected: PASS and existing validation/not-found/503 envelope tests remain green.
-
-- [ ] **Step 6: Commit contracts/error envelope**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add packages/contracts/src/correction.ts packages/contracts/src/correction.test.ts packages/contracts/src/index.ts apps/api/src/common/http/api-error.ts apps/api/src/common/http/api-error.filter.ts apps/api/src/common/http/api-error.filter.test.ts
-git commit -m "feat(contracts): define correction and history API"
+git add packages/contracts/src/correction.ts packages/contracts/src/correction.test.ts packages/contracts/src/api-error.ts packages/contracts/src/api-error.test.ts packages/contracts/src/index.ts apps/api/src/common/http/api-error.ts apps/api/src/common/http/api-error.filter.ts apps/api/src/common/http/api-error.filter.test.ts
+git commit -m "feat(contracts): define correction history and error contracts"
 ```
 
 ---
 
-### Task 3: Prisma schema, migration, and scope constraints
+### Task 3: Prisma lineage migration + scope proof
 
 **Files:**
 - Modify: `prisma/schema.prisma`
 - Create: `prisma/migrations/20260817000100_slice_02_correction_history/migration.sql`
 - Create: `tests/architecture/slice-02-scope.test.ts`
 
-**Interfaces:**
-- Produces nullable `Fact.supersedesFactId` self-link with unique predecessor constraint.
-- Produces correction-specific `LedgerEvent.factId`, `LedgerEvent.supersedesFactId`, `LedgerEvent.reason`.
-- Preserves all existing Slice 01 rows and exactly five product models/tables.
-
-- [ ] **Step 1: Write RED architecture tests for required fields and forbidden scope**
+- [ ] **Step 1: Write RED architecture test**
 
 ```ts
 import { readFile } from 'node:fs/promises';
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 
-it('adds correction linkage without adding product models', async () => {
+it('keeps five product models and adds only correction lineage fields', async () => {
   const schema = await readFile('prisma/schema.prisma', 'utf8');
-  const models = [...schema.matchAll(/^model\s+(\w+)\s+\{/gm)].map((match) => match[1]).sort();
+  const models = [...schema.matchAll(/^model\s+(\w+)\s+\{/gm)].map((m) => m[1]).sort();
   expect(models).toEqual(['CurrentFact', 'Evidence', 'Fact', 'LedgerEvent', 'Memory']);
   expect(schema).toContain('supersedesFactId');
+  expect(schema).toContain('@unique @map("supersedes_fact_id")');
   expect(schema).toContain('reason');
 });
 
-it('keeps future-slice infrastructure out', async () => {
-  const root = JSON.parse(await readFile('package.json', 'utf8')) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
-  const names = [...Object.keys(root.dependencies ?? {}), ...Object.keys(root.devDependencies ?? {})].map((name) => name.toLowerCase());
-  for (const forbidden of ['openai', 'anthropic', 'pgvector', 'redis', 'bullmq']) expect(names).not.toContain(forbidden);
+it('does not add future-slice package dependencies', async () => {
+  const paths = ['package.json', 'apps/api/package.json', 'apps/web/package.json', 'packages/contracts/package.json', 'packages/domain/package.json', 'packages/shared/package.json'];
+  const names: string[] = [];
+  for (const path of paths) {
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    names.push(...Object.keys(parsed.dependencies ?? {}), ...Object.keys(parsed.devDependencies ?? {}));
+  }
+  for (const forbidden of ['openai', 'anthropic', 'pgvector', 'redis', 'bullmq', '@aws-sdk/client-s3']) {
+    expect(names.map((name) => name.toLowerCase())).not.toContain(forbidden);
+  }
 });
 ```
 
@@ -532,65 +579,53 @@ it('keeps future-slice infrastructure out', async () => {
 pnpm exec vitest run tests/architecture/slice-02-scope.test.ts
 ```
 
-Expected: FAIL because correction fields do not exist.
+- [ ] **Step 3: Add named Prisma relations**
 
-- [ ] **Step 3: Modify Prisma relations**
-
-Use named relations to avoid ambiguity. The Fact model must include semantic equivalents of:
+Fact additions:
 
 ```prisma
 supersedesFactId String? @unique @map("supersedes_fact_id") @db.Uuid
-supersedes       Fact?   @relation("FactSupersession", fields: [supersedesFactId], references: [id], onDelete: Restrict)
-successor        Fact?   @relation("FactSupersession")
+supersedes       Fact? @relation("FactSupersession", fields: [supersedesFactId], references: [id], onDelete: Restrict)
+successor        Fact? @relation("FactSupersession")
 newFactEvents    LedgerEvent[] @relation("CorrectionNewFact")
 supersededEvents LedgerEvent[] @relation("CorrectionPreviousFact")
 ```
 
-The LedgerEvent model must include:
+LedgerEvent additions:
 
 ```prisma
-factId            String? @map("fact_id") @db.Uuid
-supersedesFactId  String? @map("supersedes_fact_id") @db.Uuid
-reason            String? @db.VarChar(500)
-fact              Fact?   @relation("CorrectionNewFact", fields: [factId], references: [id], onDelete: Restrict)
-supersedesFact    Fact?   @relation("CorrectionPreviousFact", fields: [supersedesFactId], references: [id], onDelete: Restrict)
+factId           String? @map("fact_id") @db.Uuid
+supersedesFactId String? @map("supersedes_fact_id") @db.Uuid
+reason           String? @db.VarChar(500)
+fact             Fact? @relation("CorrectionNewFact", fields: [factId], references: [id], onDelete: Restrict)
+supersedesFact   Fact? @relation("CorrectionPreviousFact", fields: [supersedesFactId], references: [id], onDelete: Restrict)
 
 @@index([factId])
 @@index([supersedesFactId])
 ```
 
-- [ ] **Step 4: Write the versioned SQL migration explicitly**
+- [ ] **Step 4: Add exact SQL migration**
 
 ```sql
 ALTER TABLE "facts" ADD COLUMN "supersedes_fact_id" UUID;
 CREATE UNIQUE INDEX "facts_supersedes_fact_id_key" ON "facts"("supersedes_fact_id");
-ALTER TABLE "facts"
-  ADD CONSTRAINT "facts_supersedes_fact_id_fkey"
-  FOREIGN KEY ("supersedes_fact_id") REFERENCES "facts"("id")
-  ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "facts" ADD CONSTRAINT "facts_supersedes_fact_id_fkey"
+  FOREIGN KEY ("supersedes_fact_id") REFERENCES "facts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "ledger_events" ADD COLUMN "fact_id" UUID;
 ALTER TABLE "ledger_events" ADD COLUMN "supersedes_fact_id" UUID;
 ALTER TABLE "ledger_events" ADD COLUMN "reason" VARCHAR(500);
 CREATE INDEX "ledger_events_fact_id_idx" ON "ledger_events"("fact_id");
 CREATE INDEX "ledger_events_supersedes_fact_id_idx" ON "ledger_events"("supersedes_fact_id");
-ALTER TABLE "ledger_events"
-  ADD CONSTRAINT "ledger_events_fact_id_fkey"
-  FOREIGN KEY ("fact_id") REFERENCES "facts"("id")
-  ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "ledger_events"
-  ADD CONSTRAINT "ledger_events_supersedes_fact_id_fkey"
-  FOREIGN KEY ("supersedes_fact_id") REFERENCES "facts"("id")
-  ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "ledger_events"
-  ADD CONSTRAINT "ledger_events_memory_corrected_fact_links_check"
-  CHECK (
-    "type" <> 'MEMORY_CORRECTED'
-    OR ("fact_id" IS NOT NULL AND "supersedes_fact_id" IS NOT NULL)
-  );
+ALTER TABLE "ledger_events" ADD CONSTRAINT "ledger_events_fact_id_fkey"
+  FOREIGN KEY ("fact_id") REFERENCES "facts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "ledger_events" ADD CONSTRAINT "ledger_events_supersedes_fact_id_fkey"
+  FOREIGN KEY ("supersedes_fact_id") REFERENCES "facts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "ledger_events" ADD CONSTRAINT "ledger_events_memory_corrected_fact_links_check"
+  CHECK ("type" <> 'MEMORY_CORRECTED' OR ("fact_id" IS NOT NULL AND "supersedes_fact_id" IS NOT NULL));
 ```
 
-- [ ] **Step 5: Validate/generate/migrate against PostgreSQL and rerun architecture tests**
+- [ ] **Step 5: Validate against real PostgreSQL**
 
 ```bash
 docker compose up -d postgres
@@ -601,9 +636,7 @@ pnpm db:migrate
 pnpm exec vitest run tests/architecture/slice-01-scope.test.ts tests/architecture/slice-02-scope.test.ts
 ```
 
-Expected: PASS; no sixth product model/table appears.
-
-- [ ] **Step 6: Commit schema evolution**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add prisma/schema.prisma prisma/migrations/20260817000100_slice_02_correction_history/migration.sql tests/architecture/slice-02-scope.test.ts
@@ -612,24 +645,28 @@ git commit -m "feat(db): add correction lineage constraints"
 
 ---
 
-### Task 4: Atomic PostgreSQL correction and deterministic history store
+### Task 4: Atomic MemoryStore correction + history on PostgreSQL
 
 **Files:**
-- Modify: `apps/api/src/memories/memory.store.ts`
 - Create: `apps/api/src/memories/memory.errors.ts`
+- Modify: `apps/api/src/memories/memory.store.ts`
 - Modify: `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.ts`
 - Modify: `apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts`
 
-**Interfaces:**
+**Produces:** atomic `correct()` and deterministic `history()` methods with existing safe availability mapping.
 
-Add to `MemoryStore`:
+- [ ] **Step 1: Define exact application/store shapes**
+
+`memory.errors.ts`:
 
 ```ts
-correct(input: CorrectMemoryStoreInput): Promise<CorrectMemoryStoreResult>;
-history(memoryId: string): Promise<StoredMemoryHistory | null>;
+export class MemoryNotFoundError extends Error { constructor() { super('MEMORY_NOT_FOUND'); this.name = 'MemoryNotFoundError'; } }
+export class StaleCorrectionError extends Error { constructor() { super('STALE_CORRECTION'); this.name = 'StaleCorrectionError'; } }
+export class NoChangeCorrectionError extends Error { constructor() { super('NO_CHANGE'); this.name = 'NoChangeCorrectionError'; } }
+export class MemoryInvariantError extends Error { constructor(message: string) { super(message); this.name = 'MemoryInvariantError'; } }
 ```
 
-Use these shapes:
+Add to `MemoryStore`:
 
 ```ts
 export interface CorrectMemoryStoreInput {
@@ -647,57 +684,106 @@ export type CorrectMemoryStoreResult =
   | { status: 'STALE'; currentFactId: string };
 
 export interface StoredHistoryVersion {
-  factId: string;
-  evidenceId: string;
-  content: string;
-  createdAt: Date;
-  reason: string | null;
-  supersedesFactId: string | null;
-  eventId: string;
-  isOriginal: boolean;
-  isCurrent: boolean;
+  factId: string; evidenceId: string; content: string; createdAt: Date;
+  reason: string | null; supersedesFactId: string | null; eventId: string;
+  isOriginal: boolean; isCurrent: boolean;
 }
 
-export interface StoredMemoryHistory {
-  memoryId: string;
-  versions: StoredHistoryVersion[];
-}
+export interface StoredMemoryHistory { memoryId: string; versions: StoredHistoryVersion[]; }
 ```
 
-- [ ] **Step 1: Extend the integration test with RED correction/atomicity/concurrency/history cases**
-
-Add tests that prove:
+- [ ] **Step 2: Write RED integration tests for atomic success and current-only retrieval**
 
 ```ts
-it('corrects atomically while preserving original rows and recordedAt', async () => {
+it('appends correction records atomically and preserves original recordedAt', async () => {
   const original = buildRecord({ text: 'Texto original.' });
   await store.create(original);
-  const correctedAt = new Date('2026-08-17T05:00:00.000Z');
-
   const result = await store.correct({
     memoryId: original.memory.id,
     expectedCurrentFactId: original.fact.id,
     text: ' Texto corrigido. ',
     reason: ' ajuste ',
-    correctedAt,
+    correctedAt: new Date('2026-08-17T05:00:00.000Z'),
     ids: { evidenceId: createId(), eventId: createId(), factId: createId() },
   });
-
   expect(result.status).toBe('CORRECTED');
   expect(await counts()).toEqual([1, 2, 2, 2, 1]);
-  const current = await store.findLiteral('corrigido');
-  expect(current?.recordedAt).toEqual(original.memory.recordedAt);
   await expect(store.findLiteral('original')).resolves.toBeNull();
+  await expect(store.findLiteral('corrigido')).resolves.toMatchObject({ recordedAt: original.memory.recordedAt });
 });
 ```
 
-Add a `Promise.allSettled` race with two corrections sharing the same `expectedCurrentFactId`; assert exactly one `CORRECTED` and exactly one `STALE`.
+- [ ] **Step 3: Write RED concurrency and rollback tests**
 
-Add a trigger that fails `BEFORE UPDATE ON current_facts`; assert counts remain `[1,1,1,1,1]` after failed correction.
+```ts
+it('allows only one of two same-base corrections to commit', async () => {
+  const original = buildRecord({ text: 'Base.' });
+  await store.create(original);
+  const make = (text: string) => store.correct({
+    memoryId: original.memory.id,
+    expectedCurrentFactId: original.fact.id,
+    text,
+    correctedAt: new Date('2026-08-17T05:00:00.000Z'),
+    ids: { evidenceId: createId(), eventId: createId(), factId: createId() },
+  });
+  const results = await Promise.all([make('A.'), make('B.')]);
+  expect(results.map((item) => item.status).sort()).toEqual(['CORRECTED', 'STALE']);
+});
 
-Add history assertions for original-only, multi-correction order, reason/event IDs, and current tip.
+it('rolls every correction write back when CurrentFact update fails', async () => {
+  const original = buildRecord({ text: 'Base.' });
+  await store.create(original);
+  await prisma.run(async (client) => {
+    await client.$executeRawUnsafe(`CREATE FUNCTION slice02_fail_current_fact_update() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'synthetic correction projection failure'; END; $$ LANGUAGE plpgsql`);
+    await client.$executeRawUnsafe(`CREATE TRIGGER slice02_fail_current_fact BEFORE UPDATE ON current_facts FOR EACH ROW EXECUTE FUNCTION slice02_fail_current_fact_update()`);
+  });
+  await expect(store.correct({
+    memoryId: original.memory.id,
+    expectedCurrentFactId: original.fact.id,
+    text: 'Falha.',
+    correctedAt: new Date('2026-08-17T05:00:00.000Z'),
+    ids: { evidenceId: createId(), eventId: createId(), factId: createId() },
+  })).rejects.toThrow();
+  expect(await counts()).toEqual([1, 1, 1, 1, 1]);
+});
+```
 
-- [ ] **Step 2: Prove RED on real PostgreSQL**
+Update test cleanup to drop `slice02_fail_current_fact` and `slice02_fail_current_fact_update()`.
+
+- [ ] **Step 4: Write RED history tests**
+
+```ts
+it('returns one-version history for an uncorrected memory', async () => {
+  const original = buildRecord({ text: 'Original.' });
+  await store.create(original);
+  await expect(store.history(original.memory.id)).resolves.toMatchObject({
+    memoryId: original.memory.id,
+    versions: [{ factId: original.fact.id, isOriginal: true, isCurrent: true, reason: null }],
+  });
+});
+
+it('returns corrected history root-to-tip with event provenance', async () => {
+  const original = buildRecord({ text: 'A.' });
+  await store.create(original);
+  const first = await store.correct({
+    memoryId: original.memory.id, expectedCurrentFactId: original.fact.id, text: 'B.', reason: 'um',
+    correctedAt: new Date('2026-08-17T05:00:00.000Z'),
+    ids: { evidenceId: createId(), eventId: createId(), factId: createId() },
+  });
+  if (first.status !== 'CORRECTED') throw new Error('expected correction');
+  await store.correct({
+    memoryId: original.memory.id, expectedCurrentFactId: first.record.fact.id, text: 'C.', reason: 'dois',
+    correctedAt: new Date('2026-08-17T06:00:00.000Z'),
+    ids: { evidenceId: createId(), eventId: createId(), factId: createId() },
+  });
+  const history = await store.history(original.memory.id);
+  expect(history?.versions.map((item) => item.content)).toEqual(['A.', 'B.', 'C.']);
+  expect(history?.versions.map((item) => item.reason)).toEqual([null, 'um', 'dois']);
+  expect(history?.versions.at(-1)?.isCurrent).toBe(true);
+});
+```
+
+- [ ] **Step 5: Prove RED on PostgreSQL**
 
 ```bash
 export DATABASE_URL='postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp'
@@ -705,24 +791,20 @@ pnpm build:packages
 pnpm exec vitest run apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts
 ```
 
-Expected: new correction/history tests FAIL.
+- [ ] **Step 6: Implement `correct()` with stable Memory-row lock**
 
-- [ ] **Step 3: Implement `correct()` with per-memory serialization**
-
-Inside the existing `withAvailabilityMapping` and `client.$transaction`:
+Inside existing `withAvailabilityMapping` and one `client.$transaction`:
 
 ```ts
 const locked = await tx.$queryRaw<Array<{ id: string }>>`
   SELECT id FROM memories WHERE id = ${input.memoryId}::uuid FOR UPDATE
 `;
 if (locked.length === 0) return { status: 'NOT_FOUND' as const };
-
 const current = await tx.currentFact.findFirst({ where: { memoryId: input.memoryId } });
 if (!current) throw new MemoryInvariantError('missing current fact');
 if (current.factId !== input.expectedCurrentFactId) {
   return { status: 'STALE' as const, currentFactId: current.factId };
 }
-
 const record = createTextCorrectionRecord({
   memoryId: input.memoryId,
   previous: {
@@ -738,35 +820,31 @@ const record = createTextCorrectionRecord({
 });
 ```
 
-Then insert `record.evidence`, `record.fact`, `record.event`, and update the existing CurrentFact row in the same transaction. Update by the old `factId` and assert one row changed so the projection cannot silently duplicate.
+Insert Evidence, Fact, LedgerEvent, then update the existing CurrentFact by old `factId`. If update count is not exactly 1, throw `MemoryInvariantError`. Do not change `recordedAt`.
 
-- [ ] **Step 4: Implement `history()` using explicit lineage, not timestamps**
+- [ ] **Step 7: Implement `history()` from lineage**
 
-Load all facts for the memory, current fact, evidence, and ledger events required for provenance. Feed fact nodes to `orderTextFactHistory`. Map the ordered nodes to `StoredHistoryVersion` by matching corrected Fact IDs to `MEMORY_CORRECTED.factId`; map the root creation event through the root evidence ID and `MEMORY_CREATED`. Throw `MemoryInvariantError` for missing/duplicate event provenance or cross-memory inconsistencies.
+Load memory/current/facts/evidence/events; require same-memory consistency; call `orderTextFactHistory`; map root to its `MEMORY_CREATED` event via evidence and each corrected Fact to exactly one `MEMORY_CORRECTED` event via `factId`. Missing/duplicate provenance throws `MemoryInvariantError`; never sort logical history by timestamp.
 
-- [ ] **Step 5: Ensure unavailability mapping still covers correction/history paths**
-
-Do not duplicate connection-error logic. Both methods must be wrapped by the existing `withAvailabilityMapping`, preserving P1001/P1002/P1008/P1017/P2024/P2037/ECONNREFUSED/ECONNRESET/57P01/57P02/57P03 behavior.
-
-- [ ] **Step 6: Run integration + domain regression**
+- [ ] **Step 8: Prove GREEN including availability regression**
 
 ```bash
 pnpm build:packages
 pnpm exec vitest run packages/domain/src/correction.test.ts apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.test.ts
 ```
 
-Expected: PASS.
+Both new methods must be wrapped by existing `withAvailabilityMapping`; do not duplicate the P1001/P1002/P1008/P1017/P2024/P2037/ECONNREFUSED/ECONNRESET/57P01/57P02/57P03 mapping.
 
-- [ ] **Step 7: Commit persistence boundary**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add apps/api/src/memories/memory.store.ts apps/api/src/memories/memory.errors.ts apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.ts apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts
+git add apps/api/src/memories/memory.errors.ts apps/api/src/memories/memory.store.ts apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.ts apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts
 git commit -m "feat(api): persist atomic memory corrections"
 ```
 
 ---
 
-### Task 5: Memory service and HTTP endpoints
+### Task 5: Service + correction/history HTTP endpoints
 
 **Files:**
 - Modify: `apps/api/src/memories/memory.service.ts`
@@ -774,83 +852,107 @@ git commit -m "feat(api): persist atomic memory corrections"
 - Modify: `apps/api/src/memories/memory.controller.ts`
 - Modify: `apps/api/src/memories/memory.controller.test.ts`
 
-**Interfaces:**
-- Service: `correct(memoryId: string, request: CorrectMemoryRequest): Promise<CorrectMemoryResponse>`.
-- Service: `history(memoryId: string): Promise<MemoryHistoryResponse | null>`.
-- HTTP: `POST /memories/:memoryId/corrections` and `GET /memories/:memoryId/history`.
+**Produces:** `POST /memories/:memoryId/corrections` and `GET /memories/:memoryId/history`.
 
-- [ ] **Step 1: Write RED service tests**
+- [ ] **Step 1: Extend `makeStore()` test helper with `correct` and `history` defaults**
 
 ```ts
-it('uses one clock read and three IDs for a correction', async () => {
+return {
+  create: async () => undefined,
+  getById: async () => null,
+  findLiteral: async () => null,
+  correct: async () => ({ status: 'NOT_FOUND' as const }),
+  history: async () => null,
+  ...overrides,
+};
+```
+
+- [ ] **Step 2: Write RED service tests with literal records, not undefined fixtures**
+
+```ts
+it('maps a successful correction using one clock read and three IDs', async () => {
   const correct = vi.fn<MemoryStore['correct']>().mockResolvedValue({
     status: 'CORRECTED',
-    record: correctionRecordFixture,
+    record: {
+      evidence: { id: 'e2', memoryId: 'm1', kind: 'text', content: 'B.', createdAt: new Date('2026-08-17T05:00:00.000Z') },
+      fact: { id: 'f2', memoryId: 'm1', evidenceId: 'e2', kind: 'autobiographical_statement', content: 'B.', supersedesFactId: 'f1', createdAt: new Date('2026-08-17T05:00:00.000Z') },
+      event: { id: 'ev2', memoryId: 'm1', evidenceId: 'e2', factId: 'f2', supersedesFactId: 'f1', type: 'MEMORY_CORRECTED', reason: null, createdAt: new Date('2026-08-17T05:00:00.000Z') },
+      currentFact: { factId: 'f2', memoryId: 'm1', evidenceId: 'e2', content: 'B.', recordedAt: new Date('2026-08-16T09:00:00.000Z') },
+    },
   });
   const now = vi.fn(() => new Date('2026-08-17T05:00:00.000Z'));
-  const ids = ['evidence-2', 'event-2', 'fact-2'];
-  const service = new MemoryService({ store: makeStore({ correct }), now, createId: () => ids.shift() ?? 'bad' });
-
-  const response = await service.correct('memory-id', {
-    text: 'Corrigido.',
-    expectedCurrentFactId: 'fact-1',
-    reason: 'ajuste',
+  const ids = ['e2', 'ev2', 'f2'];
+  const service = new MemoryService({ store: makeStore({ correct }), now, createId: () => ids.shift() ?? 'unexpected' });
+  await expect(service.correct('m1', { text: 'B.', expectedCurrentFactId: 'f1' })).resolves.toMatchObject({
+    memoryId: 'm1', current: { factId: 'f2', evidenceId: 'e2', content: 'B.' },
+    correction: { eventId: 'ev2', supersedesFactId: 'f1', reason: null },
   });
-
   expect(now).toHaveBeenCalledTimes(1);
-  expect(correct).toHaveBeenCalledTimes(1);
-  expect(response.current.factId).toBe('fact-2');
-  expect(response.correction.supersedesFactId).toBe('fact-1');
+});
+
+it('maps store outcomes/domain no-change to application errors', async () => {
+  const stale = new MemoryService({ store: makeStore({ correct: async () => ({ status: 'STALE', currentFactId: 'f2' }) }), now: () => new Date(), createId: () => 'id' });
+  await expect(stale.correct('m1', { text: 'B', expectedCurrentFactId: 'f1' })).rejects.toBeInstanceOf(StaleCorrectionError);
+  const missing = new MemoryService({ store: makeStore(), now: () => new Date(), createId: () => 'id' });
+  await expect(missing.correct('m1', { text: 'B', expectedCurrentFactId: 'f1' })).rejects.toBeInstanceOf(MemoryNotFoundError);
 });
 ```
 
-Add tests that `STALE` becomes `StaleCorrectionError`, `NOT_FOUND` becomes a not-found result/error used by controller, `CorrectionDomainError('NO_CHANGE')` becomes `NoChangeCorrectionError`, and history maps Date fields to ISO strings.
+Add a history service test with literal `StoredMemoryHistory` dates and assert ISO string mapping.
 
-- [ ] **Step 2: Write RED controller tests for status/code semantics**
+- [ ] **Step 3: Write RED controller tests**
 
-Add Supertest cases for:
+Use the existing Supertest setup and extend the service mock with `correct`/`history`. Add exact cases:
 
-```text
-POST success -> 201
-malformed memoryId -> 400 VALIDATION_FAILED
-malformed expectedCurrentFactId -> 422 VALIDATION_FAILED
-blank/oversized text -> 422 VALIDATION_FAILED
-reason > 500 -> 422 VALIDATION_FAILED
-missing memory -> 404 NOT_FOUND
-stale -> 409 STALE_CORRECTION
-no change -> 422 NO_CHANGE
-store down -> 503 SERVICE_UNAVAILABLE
-GET history success -> 200
-GET missing history -> 404 NOT_FOUND
+```ts
+service.correct.mockResolvedValue({
+  memoryId: validId,
+  current: { factId: validId, evidenceId: validId, content: 'Corrigido.', recordedAt: '2026-08-16T09:00:00.000Z', correctedAt: '2026-08-17T05:00:00.000Z' },
+  correction: { eventId: validId, supersedesFactId: validId, reason: null },
+});
+const ok = await request(app.getHttpServer()).post(`/memories/${validId}/corrections`).send({ text: 'Corrigido.', expectedCurrentFactId: validId });
+expect(ok.status).toBe(201);
 ```
 
-- [ ] **Step 3: Prove RED**
+Then mock/reject `MemoryNotFoundError`, `StaleCorrectionError`, `NoChangeCorrectionError`, and `MemoryStoreUnavailableError` one at a time and assert respectively `404/NOT_FOUND`, `409/STALE_CORRECTION`, `422/NO_CHANGE`, `503/SERVICE_UNAVAILABLE`. Send blank/4001-char text, 501-char reason, and non-v7 `expectedCurrentFactId`; assert `422/VALIDATION_FAILED` and `service.correct` not called. Add GET history 200 and missing 404.
+
+- [ ] **Step 4: Prove RED**
 
 ```bash
 pnpm build:packages
 pnpm exec vitest run apps/api/src/memories/memory.service.test.ts apps/api/src/memories/memory.controller.test.ts
 ```
 
-Expected: new cases FAIL.
+- [ ] **Step 5: Implement service methods**
 
-- [ ] **Step 4: Implement service mapping without persistence leakage**
+`MemoryService.correct` reads clock once, generates exactly `evidenceId/eventId/factId`, calls `store.correct`, maps `NOT_FOUND` → `MemoryNotFoundError`, `STALE` → `StaleCorrectionError`, maps `CorrectionDomainError` code `NO_CHANGE` → `NoChangeCorrectionError`, and returns the approved response fields. `history` maps Date fields to ISO strings and returns null only for missing memory.
 
-Generate `correctedAt` and exactly three IDs in the service; call `store.correct`; map the returned domain record to the contract. Do not expose Prisma types.
+- [ ] **Step 6: Implement controller methods**
 
-- [ ] **Step 5: Implement controller endpoints and coded errors**
+Validate route memory ID with existing `isUuidV7`. Parse body using `correctMemoryRequestSchema`, then independently require `isUuidV7(parsed.data.expectedCurrentFactId)`. Correction-body/expected-fact validation uses:
 
-Controller logic for correction must validate both `memoryId` and `expectedCurrentFactId` with existing `isUuidV7`. Parse body with `correctMemoryRequestSchema`. Use `CodedHttpException('STALE_CORRECTION', 409, 'A lembrança mudou desde a última consulta.')` and `CodedHttpException('NO_CHANGE', 422, 'A correção não altera o texto atual.')`. Use `CodedHttpException('VALIDATION_FAILED', 422, 'Os dados enviados são inválidos.')` for correction-body validation so this new endpoint follows the approved 422 contract while existing Slice 01 validation remains 400.
+```ts
+throw new CodedHttpException('VALIDATION_FAILED', 422, 'Os dados enviados são inválidos.');
+```
 
-- [ ] **Step 6: Run API tests and full existing controller regression**
+Map application errors:
+
+```ts
+if (error instanceof MemoryNotFoundError) throw new NotFoundException();
+if (error instanceof StaleCorrectionError) throw new CodedHttpException('STALE_CORRECTION', 409, 'A lembrança mudou desde a última consulta.');
+if (error instanceof NoChangeCorrectionError) throw new CodedHttpException('NO_CHANGE', 422, 'A correção não altera o texto atual.');
+```
+
+Use existing `mapAvailability` for `MemoryStoreUnavailableError`.
+
+- [ ] **Step 7: Prove GREEN + existing API regression**
 
 ```bash
 pnpm build:packages
-pnpm exec vitest run apps/api/src/memories/memory.service.test.ts apps/api/src/memories/memory.controller.test.ts apps/api/src/common/http/api-error.filter.test.ts
+pnpm exec vitest run apps/api/src/common/http/api-error.filter.test.ts apps/api/src/memories/memory.service.test.ts apps/api/src/memories/memory.controller.test.ts
 ```
 
-Expected: PASS.
-
-- [ ] **Step 7: Commit application/API boundary**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add apps/api/src/memories/memory.service.ts apps/api/src/memories/memory.service.test.ts apps/api/src/memories/memory.controller.ts apps/api/src/memories/memory.controller.test.ts
@@ -859,49 +961,48 @@ git commit -m "feat(api): expose memory correction and history"
 
 ---
 
-### Task 6: Typed web API client with stable error codes and no retry
+### Task 6: Typed web API client + stable error parsing
 
 **Files:**
 - Modify: `apps/web/src/lib/memory-api.ts`
 - Modify: `apps/web/src/lib/memory-api.test.ts`
 
-**Interfaces:**
-- `correctMemory(baseUrl, memoryId, request): Promise<CorrectMemoryResponse>`.
-- `getMemoryHistory(baseUrl, memoryId): Promise<MemoryHistoryResponse>`.
-- `MemoryApiError` gains `code: ApiErrorCode | null` while preserving `status`.
-
 - [ ] **Step 1: Write RED client tests**
 
 ```ts
-it('posts one correction request without retry', async () => {
-  const fetchMock = vi.fn().mockResolvedValue(response(correctResponseFixture, 201));
+it('posts exactly one correction request', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(response({
+    memoryId: 'm1',
+    current: { factId: 'f2', evidenceId: 'e2', content: 'B.', recordedAt: '2026-08-16T09:00:00.000Z', correctedAt: '2026-08-17T05:00:00.000Z' },
+    correction: { eventId: 'ev2', supersedesFactId: 'f1', reason: null },
+  }, 201));
   vi.stubGlobal('fetch', fetchMock);
-
-  await correctMemory('http://api/', 'memory-id', {
-    text: 'Corrigido.',
-    expectedCurrentFactId: 'fact-1',
-    reason: 'ajuste',
-  });
-
+  await correctMemory('http://api/', 'm1', { text: 'B.', expectedCurrentFactId: 'f1' });
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(fetchMock).toHaveBeenCalledWith('http://api/memories/memory-id/corrections', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: 'Corrigido.', expectedCurrentFactId: 'fact-1', reason: 'ajuste' }),
+  expect(fetchMock).toHaveBeenCalledWith('http://api/memories/m1/corrections', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'B.', expectedCurrentFactId: 'f1' }),
   });
 });
 
-it('preserves STALE_CORRECTION without retrying', async () => {
-  const fetchMock = vi.fn().mockResolvedValue(response({ error: { code: 'STALE_CORRECTION', message: 'changed', requestId: 'r1' } }, 409));
+it('preserves STALE_CORRECTION and does not retry', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(response({ error: { code: 'STALE_CORRECTION', message: 'safe', requestId: 'r1' } }, 409));
   vi.stubGlobal('fetch', fetchMock);
-  await expect(correctMemory('http://api', 'memory-id', { text: 'B', expectedCurrentFactId: 'fact-1' })).rejects.toEqual(
+  await expect(correctMemory('http://api', 'm1', { text: 'B.', expectedCurrentFactId: 'f1' })).rejects.toEqual(
     expect.objectContaining({ status: 409, code: 'STALE_CORRECTION' }),
   );
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
-```
 
-Add history GET parsing test.
+it('loads and validates history', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(response({
+    memoryId: 'm1',
+    versions: [{ factId: 'f1', evidenceId: 'e1', content: 'A.', createdAt: '2026-08-16T09:00:00.000Z', reason: null, isOriginal: true, isCurrent: true, supersedesFactId: null, eventId: 'ev1' }],
+  }));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(getMemoryHistory('http://api', 'm1')).resolves.toMatchObject({ memoryId: 'm1' });
+});
+```
 
 - [ ] **Step 2: Prove RED**
 
@@ -910,26 +1011,29 @@ pnpm build:packages
 pnpm exec vitest run apps/web/src/lib/memory-api.test.ts
 ```
 
-Expected: FAIL because methods/error code parsing do not exist.
+- [ ] **Step 3: Implement shared error parser and methods**
 
-- [ ] **Step 3: Implement one shared response-error parser**
+Import `apiErrorEnvelopeSchema`, `correctMemoryResponseSchema`, `memoryHistoryResponseSchema`, and types from `@mdp/contracts`. Extend `MemoryApiError`:
 
-Parse the existing error envelope defensively; if parsing fails, keep `code = null`. Never retry automatically.
+```ts
+export class MemoryApiError extends Error {
+  constructor(readonly status: number, readonly code: ApiErrorCode | null, message = 'Memory API request failed') {
+    super(message);
+    this.name = 'MemoryApiError';
+  }
+}
+```
 
-- [ ] **Step 4: Implement `correctMemory` and `getMemoryHistory` with contract schemas**
+For non-OK responses parse a cloned/consumed JSON body with `apiErrorEnvelopeSchema.safeParse`; set code to parsed code or null; throw once. Implement `correctMemory` POST and `getMemoryHistory` GET. Never retry.
 
-Use `correctMemoryResponseSchema.parse(await response.json())` and `memoryHistoryResponseSchema.parse(await response.json())` for successful responses.
-
-- [ ] **Step 5: Run focused web client tests**
+- [ ] **Step 4: Prove GREEN**
 
 ```bash
 pnpm build:packages
 pnpm exec vitest run apps/web/src/lib/memory-api.test.ts
 ```
 
-Expected: PASS.
-
-- [ ] **Step 6: Commit web client**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/lib/memory-api.ts apps/web/src/lib/memory-api.test.ts
@@ -938,19 +1042,19 @@ git commit -m "feat(web): add correction and history client"
 
 ---
 
-### Task 7: Inline correction in a found query result
+### Task 7: PWA inline correction/history/undo
 
 **Files:**
 - Create: `apps/web/src/features/memory/MemoryFoundResult.tsx`
 - Create: `apps/web/src/features/memory/MemoryFoundResult.test.tsx`
 - Modify: `apps/web/src/features/memory/QueryMemoryForm.tsx`
 - Modify: `apps/web/src/features/memory/QueryMemoryForm.test.tsx`
+- Modify: `apps/web/src/index.css`
 
-**Interfaces:**
+**Component interface:**
 
 ```ts
 type FoundResult = Extract<MemoryQueryResponse, { status: 'FOUND' }>;
-
 interface MemoryFoundResultProps {
   apiBaseUrl: string;
   result: FoundResult;
@@ -958,38 +1062,35 @@ interface MemoryFoundResultProps {
 }
 ```
 
-- [ ] **Step 1: Write RED UI tests for opening, cancelling, saving, and stale behavior**
+- [ ] **Step 1: Write RED correction UI test**
 
-Mock `correctMemory` and `getMemoryHistory` from `memory-api.js`. Prove:
+Mock `correctMemory` and `getMemoryHistory`. Render a literal FOUND result. Assert `Corrigir`/`Ver histórico`; open correction and assert `Texto corrigido` is prefilled. Mock successful correction and assert the call uses `result.provenance.factId`, form closes, success status appears, and `onCurrentChange` receives the new fact/evidence/content.
+
+Use this exact stale assertion after rejecting with `new MemoryApiError(409, 'STALE_CORRECTION')`:
 
 ```ts
-expect(screen.getByRole('button', { name: 'Corrigir' })).toBeInTheDocument();
-await user.click(screen.getByRole('button', { name: 'Corrigir' }));
-expect(screen.getByLabelText('Texto corrigido')).toHaveValue('Minha irmã se chama Ana.');
-expect(screen.getByLabelText('Motivo da correção (opcional)')).toBeInTheDocument();
+expect(await screen.findByRole('alert')).toHaveTextContent('A lembrança mudou');
+expect(screen.queryByRole('button', { name: 'Corrigir' })).not.toBeInTheDocument();
+expect(correctMemoryMock).toHaveBeenCalledTimes(1);
 ```
 
-On successful save, assert `correctMemory` receives the currently displayed `factId`, the form closes, visible text changes immediately, and success status is announced.
+- [ ] **Step 2: Write RED history + undo UI test**
 
-For `MemoryApiError(409, 'STALE_CORRECTION')`, assert a stale warning appears, no auto-retry occurs, and the old result no longer exposes an enabled `Corrigir` action until QueryMemoryForm receives a fresh query result.
+Mock history as versions A(original), B(current). Open history; assert A appears before B, labels `Original` and `Atual`, and reason is rendered only when non-null. Click `Usar este texto como nova correção` on A; assert correction field value becomes A. After saving, assert the request uses A as `text` but **B's current fact ID** as `expectedCurrentFactId`.
 
-- [ ] **Step 2: Prove RED**
+- [ ] **Step 3: Prove RED**
 
 ```bash
 pnpm build:packages
 pnpm exec vitest run apps/web/src/features/memory/MemoryFoundResult.test.tsx apps/web/src/features/memory/QueryMemoryForm.test.tsx
 ```
 
-Expected: FAIL because `MemoryFoundResult` does not exist.
+- [ ] **Step 4: Implement `MemoryFoundResult`**
 
-- [ ] **Step 3: Implement `MemoryFoundResult` correction state**
-
-Use local state for `editing`, `text`, `reason`, `saving`, `feedback`, and `stale`. Prefill `text` from `result.answer` every time a fresh `result.provenance.factId` arrives. Use `maxLength={MEMORY_TEXT_MAX_LENGTH}` and `maxLength={CORRECTION_REASON_MAX_LENGTH}`.
-
-On success construct the next FOUND result exactly as:
+State: `editing`, `text`, `reason`, `saving`, `stale`, `feedback`, `history`, `historyLoading`, `historyError`. On a fresh `result.provenance.factId`, reset stale/edit state and prefill current text. Use `MEMORY_TEXT_MAX_LENGTH` and `CORRECTION_REASON_MAX_LENGTH`. On correction success call:
 
 ```ts
-const next: FoundResult = {
+onCurrentChange({
   status: 'FOUND',
   answer: response.current.content,
   provenance: {
@@ -997,94 +1098,75 @@ const next: FoundResult = {
     evidenceId: response.current.evidenceId,
     factId: response.current.factId,
   },
-};
-onCurrentChange(next);
+});
 ```
 
-- [ ] **Step 4: Delegate `FOUND` rendering from QueryMemoryForm**
+History renders server order without re-sorting. `Usar este texto como nova correção` only copies old content into the edit field; concurrency base always comes from the currently displayed FOUND result.
 
-Replace the current inline result block with `MemoryFoundResult`. Keep QueryMemoryForm owning query text/loading/error/result and update its result when the child calls `onCurrentChange`.
+- [ ] **Step 5: Integrate into QueryMemoryForm**
 
-- [ ] **Step 5: Run focused UI tests and existing StoreMemoryForm regression**
+Replace only the current FOUND rendering block with `MemoryFoundResult`; QueryMemoryForm remains owner of search query/loading/result and updates its stored FOUND result via `onCurrentChange`. UNKNOWN behavior remains unchanged.
+
+- [ ] **Step 6: Add minimal responsive styles**
+
+Use existing visual variables/classes in `index.css`; add no design-system dependency. Ensure action buttons wrap on narrow screens, textarea/inputs remain full-width, history list has readable spacing, and focus outlines remain visible.
+
+- [ ] **Step 7: Prove GREEN + existing web regression**
 
 ```bash
 pnpm build:packages
-pnpm exec vitest run apps/web/src/features/memory/MemoryFoundResult.test.tsx apps/web/src/features/memory/QueryMemoryForm.test.tsx apps/web/src/features/memory/StoreMemoryForm.test.tsx
+pnpm exec vitest run apps/web/src/features/memory/MemoryFoundResult.test.tsx apps/web/src/features/memory/QueryMemoryForm.test.tsx apps/web/src/features/memory/StoreMemoryForm.test.tsx apps/web/src/App.test.tsx
 ```
 
-Expected: PASS.
-
-- [ ] **Step 6: Commit inline correction UI**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add apps/web/src/features/memory/MemoryFoundResult.tsx apps/web/src/features/memory/MemoryFoundResult.test.tsx apps/web/src/features/memory/QueryMemoryForm.tsx apps/web/src/features/memory/QueryMemoryForm.test.tsx
-git commit -m "feat(web): correct found memories inline"
+git add apps/web/src/features/memory/MemoryFoundResult.tsx apps/web/src/features/memory/MemoryFoundResult.test.tsx apps/web/src/features/memory/QueryMemoryForm.tsx apps/web/src/features/memory/QueryMemoryForm.test.tsx apps/web/src/index.css
+git commit -m "feat(web): correct and inspect memory history inline"
 ```
 
 ---
 
-### Task 8: Inline history, undo-by-append, and browser E2E
+### Task 8: Browser proof, CI hardening, evidence, and gate preparation
 
 **Files:**
-- Modify: `apps/web/src/features/memory/MemoryFoundResult.tsx`
-- Modify: `apps/web/src/features/memory/MemoryFoundResult.test.tsx`
 - Create: `tests/e2e/correction-history.spec.ts`
+- Modify: `.github/workflows/ci.yml`
+- Create: `docs/phases/SLICE-02.md`
+- Create: `docs/evidence/slice-02/SLICE-02-EVIDENCE-001.md`
+- Create: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-PLAN.md`
+- Create: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-VALIDATION.txt`
+- Create: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-VALIDATION-FULL.txt`
+- Create: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-SMOKE.txt`
+- Create: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-REPORT.md`
+- Create: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-CHECKPOINT.yaml`
+- Create: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-DECISIONS.md`
+- Create: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/README.md`
+- Create: `artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-ARTIFACT-MANIFEST.sha256`
+- Modify when authorized/accurate: `docs/STATE.md`, `docs/MDP-RESUME-CARD.md`
 
-**Interfaces:**
-- `Ver histórico` loads `GET /memories/:memoryId/history` on demand.
-- `Usar este texto como nova correção` copies historical text into the normal correction form while retaining the **current displayed** `factId` as `expectedCurrentFactId`.
+- [ ] **Step 1: Write Playwright E2E before final full run**
 
-- [ ] **Step 1: Write RED UI history/undo tests**
-
-Prove original-to-current labels, optional reason display, history loading error, and undo prefill. Critical assertion:
-
-```ts
-await user.click(screen.getByRole('button', { name: 'Usar este texto como nova correção' }));
-expect(screen.getByLabelText('Texto corrigido')).toHaveValue('Texto original.');
-await user.click(screen.getByRole('button', { name: 'Salvar correção' }));
-expect(correctMemoryMock).toHaveBeenLastCalledWith(
-  'http://api',
-  'memory-id',
-  expect.objectContaining({
-    text: 'Texto original.',
-    expectedCurrentFactId: 'fact-current',
-  }),
-);
-```
-
-- [ ] **Step 2: Implement history rendering**
-
-Render each version with full text, timestamp, `Original` and/or `Atual` labels, source/provenance, and reason when non-null. Do not infer order in the browser; render server order.
-
-- [ ] **Step 3: Run UI tests GREEN**
-
-```bash
-pnpm build:packages
-pnpm exec vitest run apps/web/src/features/memory/MemoryFoundResult.test.tsx
-```
-
-Expected: PASS.
-
-- [ ] **Step 4: Write the Playwright E2E scenario**
-
-The test must use synthetic text and prove this exact user-visible flow:
+The test must execute this exact synthetic flow:
 
 ```text
 store "Minha irmã sintética se chama Ana."
-query "Ana" -> FOUND
+query Ana -> FOUND
 Corrigir -> "Minha irmã sintética se chama Beatriz."
-visible result updates to Beatriz
-query "Ana" -> UNKNOWN
-query "Beatriz" -> FOUND
+visible result updates immediately
+query Ana -> UNKNOWN
+query Beatriz -> FOUND
 Ver histórico -> original then correction
 Usar texto original como nova correção
 save -> visible current becomes Ana again
 Ver histórico -> three versions remain present in order
 ```
 
-Also assert the laboratory warning remains visible.
+Also assert `Ambiente de laboratório` still says `Use somente dados sintéticos`.
 
-- [ ] **Step 5: Run browser E2E with real API/PostgreSQL**
+- [ ] **Step 2: Prove E2E RED then GREEN**
+
+Before UI/API completion the new file must fail; after Tasks 1–7:
 
 ```bash
 export DATABASE_URL='postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp'
@@ -1092,29 +1174,17 @@ pnpm build
 pnpm e2e -- correction-history.spec.ts
 ```
 
-Expected: PASS.
+Expected final result: PASS.
 
-- [ ] **Step 6: Commit history/E2E**
+- [ ] **Step 3: Extend CI structural checks**
 
-```bash
-git add apps/web/src/features/memory/MemoryFoundResult.tsx apps/web/src/features/memory/MemoryFoundResult.test.tsx tests/e2e/correction-history.spec.ts
-git commit -m "feat(web): show immutable memory history"
-```
+Keep the exact table allowlist unchanged. Add psql assertions that `facts.supersedes_fact_id` exists and is uniquely indexed; `ledger_events.fact_id`, `supersedes_fact_id`, and `reason varchar(500)` exist; and `ledger_events_memory_corrected_fact_links_check` exists.
 
----
+- [ ] **Step 4: Extend real PostgreSQL-outage proof to correction**
 
-### Task 9: Full regression, CI proofs, PRF/evidence, and gate-ready documentation
+While DB is healthy, create a synthetic memory and save response to `/tmp/memory-created.json`; parse `memory.id` and `fact.id` with Node. After `docker compose stop postgres`, POST one correction using those IDs. Assert HTTP 503, `SERVICE_UNAVAILABLE`, no synthetic text, and no case-insensitive `sql` in the response. Keep existing live/ready/create outage assertions.
 
-**Files:**
-- Modify: `.github/workflows/ci.yml`
-- Create/update: Slice 02 phase/evidence/PRF files listed in the File Structure Map.
-- Modify only when execution is authorized: `docs/STATE.md`, `docs/MDP-RESUME-CARD.md`.
-
-**Interfaces:**
-- Produces reproducible evidence for review/audit/gate.
-- Does **not** merge, mark `ENTREGUE`, authorize real data, start pilot, or start Slice 03.
-
-- [ ] **Step 1: Run the complete local validation before changing evidence docs**
+- [ ] **Step 5: Run complete local validation before writing evidence**
 
 ```bash
 export DATABASE_URL='postgresql://mdp:mdp_local_only@127.0.0.1:5432/mdp'
@@ -1129,40 +1199,13 @@ pnpm build
 pnpm e2e
 ```
 
-Expected: every command PASS; existing Slice 01 E2E and new Slice 02 E2E both pass.
+All commands must PASS. Record real output/IDs/counts; do not pre-fill evidence with predicted results.
 
-- [ ] **Step 2: Extend CI with Slice 02 structural constraints without removing Slice 01 checks**
+- [ ] **Step 6: Write phase/evidence/PRF from actual results**
 
-After migration, add psql assertions that:
+`PHASE-02-REPORT.md` must map every approved acceptance criterion to test/command evidence. `PHASE-02-CHECKPOINT.yaml` must use only the evidence-supported state (`IN_PROGRESS`, `IN_REVIEW`, or `READY_FOR_GATE`); never `ENTREGUE` before the governed completion gate/merge/post-merge evidence.
 
-```text
-facts.supersedes_fact_id exists and has a unique index
-ledger_events.fact_id exists
-ledger_events.supersedes_fact_id exists
-ledger_events.reason is varchar(500)
-ledger_events_memory_corrected_fact_links_check exists
-```
-
-Keep the exact table allowlist `current_facts,evidence,facts,ledger_events,memories` unchanged.
-
-- [ ] **Step 3: Extend the real database-outage proof to correction**
-
-While PostgreSQL is healthy, create a synthetic memory and parse `memory.id` / `fact.id`. Stop PostgreSQL, POST a correction using those IDs, and assert:
-
-```text
-HTTP 503
-error.code == SERVICE_UNAVAILABLE
-response does not contain memory text
-response does not contain SQL details
-```
-
-Do not remove the existing live/ready/create outage assertions.
-
-- [ ] **Step 4: Create Slice 02 PRF/evidence artifacts from actual command output**
-
-`PHASE-02-VALIDATION.txt` records focused boundary commands; `PHASE-02-VALIDATION-FULL.txt` records the full regression command set; `PHASE-02-SMOKE.txt` records the deterministic E2E/outage smoke evidence. `PHASE-02-REPORT.md` maps every acceptance criterion to exact test/file/run evidence. `PHASE-02-CHECKPOINT.yaml` must state the current gate state truthfully (`IN_REVIEW`, `READY_FOR_GATE`, or equivalent only when evidence supports it).
-
-- [ ] **Step 5: Generate the SHA-256 manifest only after all PRF contents are final**
+- [ ] **Step 7: Build/verify PRF manifest**
 
 ```bash
 cd artifacts/phases/SLICE-02-CORRECTION-HISTORY
@@ -1170,11 +1213,7 @@ sha256sum PHASE-02-PLAN.md PHASE-02-REPORT.md PHASE-02-VALIDATION.txt PHASE-02-V
 sha256sum -c PHASE-02-ARTIFACT-MANIFEST.sha256
 ```
 
-Expected: every file `OK`.
-
-- [ ] **Step 6: Add CI verification for the final Slice 02 manifest**
-
-Add a separate step after the existing Slice 01 manifest verification:
+- [ ] **Step 8: Add final CI manifest verification**
 
 ```yaml
 - name: Verify Slice 02 PRF manifest
@@ -1182,11 +1221,9 @@ Add a separate step after the existing Slice 01 manifest verification:
   run: sha256sum -c PHASE-02-ARTIFACT-MANIFEST.sha256
 ```
 
-- [ ] **Step 7: Update canonical docs only to the evidence-supported pre-gate state**
+Keep the existing Slice 01 manifest verification.
 
-During authorized implementation, `docs/STATE.md` may move Slice 02 from `NOT STARTED / NOT AUTHORIZED` to the accurate active/review state. Before human gate/merge it must **not** say `COMPLETE`, `ENTREGUE`, `MERGED`, `POST-MERGE VALIDATED`, real data authorized, pilot authorized, or Slice 03 authorized.
-
-- [ ] **Step 8: Run full validation again after docs/workflow changes**
+- [ ] **Step 9: Update canonical state only to truthful pre-gate status and run full regression again**
 
 ```bash
 pnpm prisma:validate
@@ -1197,42 +1234,32 @@ pnpm format:check
 pnpm test
 pnpm build
 pnpm e2e
-cd artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY && sha256sum -c PHASE-01-ARTIFACT-MANIFEST.sha256
-cd ../SLICE-02-CORRECTION-HISTORY && sha256sum -c PHASE-02-ARTIFACT-MANIFEST.sha256
+(cd artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY && sha256sum -c PHASE-01-ARTIFACT-MANIFEST.sha256)
+(cd artifacts/phases/SLICE-02-CORRECTION-HISTORY && sha256sum -c PHASE-02-ARTIFACT-MANIFEST.sha256)
 ```
 
-Expected: PASS.
+Before HUMAN_GATE/merge, docs must still say real data NOT AUTHORIZED, pilot NOT AUTHORIZED, Slice 03 NOT AUTHORIZED, and Slice 02 not yet `ENTREGUE`.
 
-- [ ] **Step 9: Commit evidence/gate preparation**
+- [ ] **Step 10: Commit gate evidence**
 
 ```bash
-git add .github/workflows/ci.yml docs/STATE.md docs/MDP-RESUME-CARD.md docs/phases/SLICE-02.md docs/evidence/slice-02 artifacts/phases/SLICE-02-CORRECTION-HISTORY
+git add .github/workflows/ci.yml tests/e2e/correction-history.spec.ts docs/STATE.md docs/MDP-RESUME-CARD.md docs/phases/SLICE-02.md docs/evidence/slice-02 artifacts/phases/SLICE-02-CORRECTION-HISTORY
 git commit -m "docs: prepare Slice 02 gate evidence"
 ```
 
-- [ ] **Step 10: Push branch/open or update the Slice 02 PR and wait for fresh CI/review evidence**
+- [ ] **Step 11: PR/review/audit/gate**
 
-Do not interpret green CI as merge authorization. Resolve all BLOCKER/REQUIRED_FOR_ACCEPTANCE findings, obtain the required independent audit/internal gate under the current MCF rules, then escalate HUMAN_GATE only to LEANDRO if integration/completion requires it.
+Push/update the Slice 02 PR, require fresh CI, classify findings as BLOCKER / REQUIRED_FOR_ACCEPTANCE / FUTURE_OR_IMPROVEMENT, resolve all current-boundary findings, obtain independent audit/internal gate required by current MCF governance, and escalate HUMAN_GATE only to LEANDRO. Green CI alone never authorizes merge/completion.
 
 ---
 
-## Plan Self-Review Checklist
+## Self-Review Result
 
-Before implementation begins, the executor must confirm:
-
-- [ ] Every approved design requirement maps to a task above.
-- [ ] No task introduces a sixth product model/table.
-- [ ] No task introduces future-slice infrastructure or dependencies.
-- [ ] Correction validation is deterministic trim/length only; no semantic/AI usefulness judgment.
-- [ ] CurrentFact recorded time remains stable.
-- [ ] History order comes from predecessor links, never timestamp sorting.
-- [ ] Concurrent same-base corrections cannot both succeed.
-- [ ] No-change, stale, rollback, and database-outage paths have executable tests.
-- [ ] Undo is implemented by appending a new correction using old content and the current fact as concurrency base.
-- [ ] `FOUND`/`UNKNOWN` Slice 01 semantics remain cumulative regression contracts.
-- [ ] Real data, pilot, Slice 03, AI, offline, sync, deletion/purge remain unauthorized/out of scope.
-- [ ] Final evidence docs describe only what fresh tests/CI actually prove.
+- Spec coverage: correction, multiple corrections, optional reason, trim/limits, no-change, stale write, explicit predecessor, `MEMORY_CORRECTED`, atomicity, current-only retrieval, history, one-version history, undo-by-append, PWA, E2E, outage, and exclusions all map to tasks above.
+- Placeholder scan: no `TBD`, `TODO`, “implement later”, undefined fixture, or “same as previous task” instruction is permitted.
+- Type consistency: `CorrectMemoryRequest`, `CorrectMemoryResponse`, `MemoryHistoryResponse`, `ApiErrorCode`, `TextCorrectionRecord`, and `CorrectMemoryStoreResult` are defined before downstream use.
+- Scope: one vertical Slice 02 plan; no independent future subsystem is bundled.
 
 ## Execution Boundary
 
-This plan is a **planning artifact only**. Its existence and approval do not authorize code execution. Once LEANDRO explicitly authorizes Slice 02 implementation, use one of the approved execution workflows and preserve the TDD/review/gate sequence above.
+This is a **planning artifact only**. It does not authorize code, real data, pilot, merge, or Slice 03. Once LEANDRO explicitly authorizes Slice 02 implementation, execute task-by-task with the required Superpowers execution skill and current MCF governance.
