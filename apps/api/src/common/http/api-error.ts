@@ -1,11 +1,14 @@
-export type ApiErrorCode =
-  'VALIDATION_FAILED' | 'NOT_FOUND' | 'INTERNAL_ERROR' | 'SERVICE_UNAVAILABLE';
+import type { ApiErrorCode as SharedApiErrorCode } from '@mdp/contracts';
+import { HttpException } from '@nestjs/common';
 
-export interface ApiErrorEnvelope {
-  error: {
-    code: ApiErrorCode;
-    message: string;
-    requestId: string;
-    fields?: Record<string, string[]>;
-  };
+export type { ApiErrorCode, ApiErrorEnvelope } from '@mdp/contracts';
+
+export class CodedHttpException extends HttpException {
+  constructor(
+    readonly code: SharedApiErrorCode,
+    status: number,
+    readonly safeMessage: string,
+  ) {
+    super(safeMessage, status);
+  }
 }
