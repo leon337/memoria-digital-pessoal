@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { QueryMemoryForm } from './features/memory/QueryMemoryForm.js';
+import { StoreMemoryForm } from './features/memory/StoreMemoryForm.js';
 import { getApiReadiness } from './lib/api-health.js';
 
 export function App({ apiBaseUrl }: { apiBaseUrl: string }) {
@@ -14,14 +16,26 @@ export function App({ apiBaseUrl }: { apiBaseUrl: string }) {
       : status === 'ready'
         ? 'API pronta'
         : 'API indisponível';
+  const enabled = status === 'ready';
 
   return (
-    <main>
-      <h1>Memória Digital Pessoal</h1>
-      <p>FOUNDATION técnica</p>
-      <p role="status" aria-live="polite">
-        {text}
-      </p>
+    <main className="app-shell">
+      <header className="app-header">
+        <h1>Memória Digital Pessoal</h1>
+        <p>Guarde uma lembrança e encontre depois as palavras que foram registradas.</p>
+        <aside className="lab-warning" aria-label="Ambiente de laboratório">
+          <strong>Ambiente de laboratório.</strong> Use somente dados sintéticos. Não registre dados
+          pessoais ou lembranças reais nesta versão.
+        </aside>
+        <p role="status" aria-live="polite" className="api-status">
+          {text}
+        </p>
+      </header>
+
+      <div className="memory-grid">
+        <StoreMemoryForm apiBaseUrl={apiBaseUrl} enabled={enabled} />
+        <QueryMemoryForm apiBaseUrl={apiBaseUrl} enabled={enabled} />
+      </div>
     </main>
   );
 }

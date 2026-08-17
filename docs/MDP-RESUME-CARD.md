@@ -7,37 +7,40 @@
 - Orchestrator: MESTRE
 - Official repository: `leon337/memoria-digital-pessoal`
 - Default branch: `main`
+- Active branch: `slice/01-trusted-text-memory`
 - Visibility: `private`
 
 ## Current state
 
-- Product Discovery Q1–Q16: COMPLETE
-- Conceptual Architecture Q1–Q16: COMPLETE
-- TECH-01 Q1–Q16: COMPLETE
-- PLAN-01 Q1–Q16: COMPLETE
-- PLAN-01 consolidation: COMPLETE
+- Product Discovery: COMPLETE
+- Conceptual Architecture: COMPLETE
+- TECH-01: COMPLETE
+- PLAN-01: COMPLETE
 - BOOT-01: COMPLETE
 - FOUNDATION: COMPLETE
-- PR #1: MERGED
-- Slice 01: NOT STARTED / NOT AUTHORIZED
+- Slice 01: IMPLEMENTED / VALIDATED / IN_REVIEW / READY_FOR_GATE / NOT MERGED / NOT COMPLETE
 - Real sensitive data: NOT AUTHORIZED
 - Pilot: NOT AUTHORIZED
+- Slice 02: NOT STARTED / NOT AUTHORIZED
 
-## FOUNDATION evidence
+## Slice 01 checkpoint
 
-- Reviewed code HEAD: `57341c228cb3303b55d1a4ff7a7dff690f97e546`
-- Canonical code verification CI run: `31935826287` — PASS
-- Final pre-merge docs-state CI run: `31935954525` — PASS
-- HUMAN_GATE: APPROVED by LEANDRO on `2026-08-16`
-- Merge commit: `47a5d6fc0c02638531861a65be7bd2406575415a`
-- Post-merge `main` CI run: `31936579159` — PASS
-- Evidence file: `docs/evidence/foundation/FOUNDATION-EVIDENCE-001.md`
-- Open Critical findings: `0`
-- Open Important findings: `0`
+- Entry authorization: APPROVED by LEANDRO on `2026-08-16`
+- Approach: `A — Deterministic Textual Fact`
+- Design/spec: APPROVED by LEANDRO
+- Execution mode: inline
+- PR: `#2 — SLICE 01: trusted text memory` — OPEN / NOT MERGED
+- Reviewed code HEAD: `07a41381f7bc47d9f048f90f3b36fcc6f85e03d1`
+- Canonical code CI: `31939889153` — PASS
+- Evidence: `docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md`
+- Checkpoint: `docs/checkpoints/MDP-SLICE-01-CHECKPOINT-001.md`
+- PRF: `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/`
+- Open Critical: `0`
+- Open Important: `0`
+- Independent MCF audit: pending as gate input; not simulated
 
 ## Recovery order
 
-Read in this order:
 1. `docs/STATE.md`
 2. `docs/governance/MDP-GOVERNANCE-001.md`
 3. `docs/decisions/MDP-PRODUCT-DISCOVERY-001.md`
@@ -45,22 +48,23 @@ Read in this order:
 5. `docs/decisions/MDP-TECH-01-DECISIONS-001.md`
 6. `docs/decisions/MDP-PLAN-01-DECISIONS-001.md`
 7. `docs/roadmaps/MDP-IMPLEMENTATION-ROADMAP-001.md`
-8. `docs/superpowers/specs/2026-08-16-foundation-design.md`
-9. `docs/superpowers/plans/2026-08-16-foundation-implementation.md`
-10. `docs/evidence/foundation/FOUNDATION-EVIDENCE-001.md`
-11. latest file in `docs/checkpoints/`
+8. `docs/superpowers/specs/2026-08-16-slice-01-trusted-text-memory-design.md`
+9. `docs/superpowers/plans/2026-08-16-slice-01-trusted-text-memory-implementation.md`
+10. `docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md`
+11. `docs/checkpoints/MDP-SLICE-01-CHECKPOINT-001.md`
+12. `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/README.md`
 
 ## Critical rules
 
-- Repository state is canonical when it can answer the question.
-- AI is not autobiographical truth.
 - Evidence and Ledger are canonical; projections are reconstructible.
 - No silent overwrite of originals or conflicts.
-- Lack of evidence means UNKNOWN.
+- Lack of matching evidence means `UNKNOWN`.
+- AI is not autobiographical truth.
+- Slice 01 uses synthetic, non-sensitive laboratory data only.
 - Real sensitive data requires Pilot Readiness plus explicit HUMAN_GATE by LEANDRO.
-- FOUNDATION completion does not authorize Slice 01.
-- Slice 01 requires a separate explicit authorization from LEANDRO.
+- Green CI does not authorize merge or the next slice.
+- Slice 01 remains incomplete until its applicable gate closes it.
 
-## Next decision
+## Next action
 
-LEANDRO decides whether to authorize the next boundary: `Slice 01 — Trusted Text Memory`. Until that gate is granted, Slice 01 remains blocked.
+Enter the governed Slice 01 gate process. Keep PR #2 unmerged until that gate authorizes integration.

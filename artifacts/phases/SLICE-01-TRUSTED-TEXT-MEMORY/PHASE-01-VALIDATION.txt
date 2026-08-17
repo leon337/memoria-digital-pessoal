@@ -1,0 +1,37 @@
+PHASE-01 VALIDATION SUMMARY
+Mission: MDP-001
+Boundary: SLICE 01 — Trusted Text Memory
+Validated product-code HEAD: de8185ed1a152c12828bee02a4c8acc3398a6d7d
+Canonical product-code CI run: 31972155005
+Job: 95226131010
+
+pnpm install --frozen-lockfile ........ PASS
+PostgreSQL start/health ............... PASS
+prisma validate/generate .............. PASS
+migrations deploy ..................... PASS
+exact five-table allowlist ............ PASS
+typecheck ............................. PASS
+lint .................................. PASS
+format:check .......................... PASS
+unit/integration/architecture tests ... PASS (53/53)
+build ................................. PASS
+workspace runtime import .............. PASS
+Playwright E2E ........................ PASS (2/2)
+real PostgreSQL outage live/ready ..... PASS
+memory POST during DB outage -> 503 ... PASS
+safe outage envelope leak checks ...... PASS
+P2024/P2037 regression mapping ........ PASS
+
+TDD regression trace:
+RED commit: b5199578a570ed13e49be92464e1e14d0ca2eb6c
+RED CI: 31972074965 / job 95225939147
+GREEN fix: de8185ed1a152c12828bee02a4c8acc3398a6d7d
+GREEN CI: 31972155005 / job 95226131010
+
+Open Critical findings: 0
+Open Important findings: 0
+Open review threads: 0
+Independent MCF audit: PASS_FOR_GATE
+Real sensitive data: NOT AUTHORIZED
+PR #2: OPEN / NOT MERGED
+Phase state: IN_REVIEW / READY_FOR_GATE

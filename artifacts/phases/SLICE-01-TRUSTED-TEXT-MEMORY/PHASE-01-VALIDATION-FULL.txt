@@ -1,0 +1,83 @@
+PHASE-01 VALIDATION — EXPANDED SAFE REFERENCES
+
+Canonical validated product code:
+  HEAD de8185ed1a152c12828bee02a4c8acc3398a6d7d
+  CI   31972155005
+  JOB  95226131010
+
+Canonical CI sequence:
+  - frozen pnpm install
+  - Docker PostgreSQL
+  - prisma validate
+  - prisma generate
+  - prisma migrate deploy
+  - exact product-table allowlist
+  - TypeScript typecheck
+  - ESLint
+  - Prettier check
+  - PRF SHA-256 manifest verification
+  - Vitest projects: web, API, integration, shared, contracts, domain, architecture
+  - build
+  - workspace runtime import
+  - Playwright Chromium install
+  - Foundation browser E2E
+  - Slice 01 trusted-text browser E2E
+  - real PostgreSQL outage degradation proof
+  - safe memory POST outage proof
+
+Canonical GREEN results:
+  - 18 Vitest files passed
+  - 53 Vitest tests passed
+  - 2 Playwright E2E tests passed
+  - healthy live/ready = 200/200
+  - DB-down live/ready/memory = 200/503/503
+  - memory outage envelope = SERVICE_UNAVAILABLE
+  - submitted synthetic content and SQL are not leaked by the outage envelope
+
+Acceptance-specific executable evidence:
+  apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.integration.test.ts
+    * exact Evidence round-trip
+    * Fact/Evidence/CurrentFact equality
+    * atomic transaction
+    * late-write rollback to zero rows
+    * case-insensitive literal retrieval
+    * percent/underscore literal behavior
+    * stable recordedAt/factId ordering
+  apps/api/src/infrastructure/persistence/prisma/prisma-memory.store.test.ts
+    * P2024 pool acquisition timeout maps to store unavailable
+    * P2037 too-many-connections maps to store unavailable
+  apps/api/src/memories/memory.controller.test.ts
+    * 201 create
+    * 400 validation
+    * 404 not found
+    * FOUND/UNKNOWN
+    * safe 503 mapping
+  tests/architecture/slice-01-scope.test.ts
+    * exact five Prisma models
+    * forbidden future/AI dependencies absent
+    * no Evidence/Ledger mutation routes
+    * parameterized strpos and no LIKE
+  tests/e2e/foundation.spec.ts
+    * Foundation web/API/PostgreSQL readiness regression
+  tests/e2e/trusted-text-memory.spec.ts
+    * synthetic store -> success -> query -> answer/source -> UNKNOWN
+    * laboratory warning visible
+
+Post-review TDD trace:
+  b5199578a570ed13e49be92464e1e14d0ca2eb6c  test-only RED commit
+  31972074965 / 95225939147  RED: P2024 and P2037 tests fail; 51 existing tests pass
+  de8185ed1a152c12828bee02a4c8acc3398a6d7d  minimal production fix
+  31972155005 / 95226131010  GREEN: complete CI PASS
+
+Review state:
+  - Codex P2 connection-pool finding: RESOLVED
+  - open review threads: 0
+  - open Critical: 0
+  - open Important: 0
+
+Independent MCF audit:
+  artifact: docs/audits/SLICE-01-INDEPENDENT-MCF-AUDIT-001.md
+  verdict: PASS_FOR_GATE
+  merge_authorization: NOT GRANTED
+
+No secret, credential or real personal content is included in this record.

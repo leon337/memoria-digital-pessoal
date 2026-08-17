@@ -9,6 +9,20 @@ export default defineConfig({
       'packages/shared/vitest.config.ts',
       {
         test: {
+          name: 'contracts',
+          environment: 'node',
+          include: ['packages/contracts/src/**/*.test.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'domain',
+          environment: 'node',
+          include: ['packages/domain/src/**/*.test.ts'],
+        },
+      },
+      {
+        test: {
           name: 'architecture',
           environment: 'node',
           include: ['tests/architecture/**/*.test.ts'],

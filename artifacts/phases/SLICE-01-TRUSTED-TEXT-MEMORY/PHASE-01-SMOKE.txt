@@ -1,0 +1,35 @@
+PHASE-01 SMOKE
+
+Environment:
+  built Vite web app
+  built NestJS API
+  real PostgreSQL
+  Chromium via Playwright
+  synthetic fixtures only
+
+Procedure:
+  1. wait until GET /health/ready returns 200
+  2. open the web application
+  3. confirm laboratory/synthetic-only warning
+  4. enter synthetic memory: "Minha irmã se chama Ana."
+  5. select "Guardar"
+  6. observe "Lembrança guardada."
+  7. query "Ana"
+  8. observe exact stored statement
+  9. observe "Fonte: lembrança guardada"
+ 10. query a synthetic absent term
+ 11. observe explicit UNKNOWN copy and no previous answer
+
+Observed:
+  PASS in canonical CI 31939889153, tests/e2e/trusted-text-memory.spec.ts
+
+Foundation smoke:
+  PASS in tests/e2e/foundation.spec.ts
+
+Database degradation:
+  live remains 200
+  ready becomes 503
+  POST /memories becomes safe 503 SERVICE_UNAVAILABLE
+  PASS in canonical CI 31939889153
+
+Result: PASS

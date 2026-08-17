@@ -12,6 +12,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@mdp/contracts": "workspace:*",
+    "@mdp/domain": "workspace:*",
     "@mdp/shared": "workspace:*",
     "@nestjs/common": "latest",
     "@nestjs/core": "latest",

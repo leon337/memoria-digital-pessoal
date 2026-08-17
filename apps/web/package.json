@@ -11,6 +11,7 @@
     "test": "vitest run --config vite.config.ts"
   },
   "dependencies": {
+    "@mdp/contracts": "workspace:*",
     "react": "latest",
     "react-dom": "latest",
     "zod": "latest"

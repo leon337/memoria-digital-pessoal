@@ -1,12 +1,17 @@
+import { createId } from '@mdp/shared';
 import { Module } from '@nestjs/common';
 import type { ApiEnv } from './config/env.js';
 import { API_ENV, EnvModule } from './config/env.module.js';
 import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
+import { PrismaMemoryStore } from './infrastructure/persistence/prisma/prisma-memory.store.js';
 import {
   PRISMA_SERVICE,
   PrismaService,
 } from './infrastructure/persistence/prisma/prisma.service.js';
+import { MemoryController } from './memories/memory.controller.js';
+import { MEMORY_SERVICE, MemoryService } from './memories/memory.service.js';
+import { MEMORY_STORE, type MemoryStore } from './memories/memory.store.js';
 
 const prismaProvider = {
   provide: PRISMA_SERVICE,
@@ -14,9 +19,21 @@ const prismaProvider = {
   useFactory: (env: ApiEnv) => new PrismaService({ databaseUrl: env.databaseUrl }),
 };
 
+const memoryStoreProvider = {
+  provide: MEMORY_STORE,
+  inject: [PRISMA_SERVICE],
+  useFactory: (prisma: PrismaService) => new PrismaMemoryStore(prisma),
+};
+
+const memoryServiceProvider = {
+  provide: MEMORY_SERVICE,
+  inject: [MEMORY_STORE],
+  useFactory: (store: MemoryStore) => new MemoryService({ store, now: () => new Date(), createId }),
+};
+
 @Module({
   imports: [EnvModule],
-  controllers: [HealthController],
-  providers: [HealthService, prismaProvider],
+  controllers: [HealthController, MemoryController],
+  providers: [HealthService, prismaProvider, memoryStoreProvider, memoryServiceProvider],
 })
 export class AppModule {}

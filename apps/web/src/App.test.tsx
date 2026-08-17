@@ -7,10 +7,25 @@ vi.mock('./lib/api-health.js', () => ({
 }));
 
 describe('App', () => {
-  it('shows accessible FOUNDATION readiness', async () => {
+  it('preserves Foundation readiness and exposes the two Slice 01 actions', async () => {
     render(<App apiBaseUrl="http://127.0.0.1:3000" />);
 
     expect(screen.getByRole('heading', { name: 'Memória Digital Pessoal' })).toBeInTheDocument();
-    expect(await screen.findByRole('status')).toHaveTextContent('API pronta');
+    expect(await screen.findByText('API pronta')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Guardar uma lembrança' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Consultar minhas lembranças' }),
+    ).toBeInTheDocument();
+  });
+
+  it('makes the synthetic-only laboratory boundary explicit', () => {
+    render(<App apiBaseUrl="http://127.0.0.1:3000" />);
+
+    expect(screen.getByLabelText('Ambiente de laboratório')).toHaveTextContent(
+      'Use somente dados sintéticos',
+    );
+    expect(screen.getByLabelText('Ambiente de laboratório')).toHaveTextContent(
+      'Não registre dados pessoais ou lembranças reais nesta versão.',
+    );
   });
 });
