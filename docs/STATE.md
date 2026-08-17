@@ -6,7 +6,7 @@
 
 ## Current phase
 
-`SLICE 01 — COMPLETE / ENTREGUE`
+`SLICE 02 — IMPLEMENTED / TECHNICALLY VALIDATED / READY_FOR_GOVERNANCE`
 
 ## Status
 
@@ -19,17 +19,20 @@
 | BOOT-01 | COMPLETE |
 | FOUNDATION | COMPLETE |
 | Slice 01 | COMPLETE / MERGED / POST-MERGE VALIDATED |
+| Slice 02 | IMPLEMENTED / TECHNICALLY VALIDATED / PRE-MERGE |
 | Real data | NOT AUTHORIZED |
 | Pilot | NOT AUTHORIZED |
-| Slice 02 | NOT STARTED / NOT AUTHORIZED |
+| Slice 03 | NOT AUTHORIZED |
 
 ## Governance
 
 - Human final authority: LEANDRO.
 - Orchestrator: MESTRE.
 - HUMAN_GATE belongs exclusively to LEANDRO.
-- LEANDRO explicitly authorized merge and formal completion of Slice 01 on `2026-08-17`.
-- Green CI alone did not authorize merge; integration occurred only after the governed review, independent audit, LÉO gate and HUMAN_GATE.
+- LEANDRO approved the Slice 02 design/spec and authorized implementation on `2026-08-17`.
+- Green CI alone does not authorize merge or formal completion.
+- No independent Emily audit or LÉO internal gate is claimed for Slice 02 because this runtime did not expose those independent agent executions.
+- Slice 02 merge authorization remains pending.
 - Repository state is canonical when it can answer the project-state question.
 
 ## FOUNDATION completion evidence
@@ -41,31 +44,39 @@
 
 ## SLICE 01 completion evidence
 
-- Approved approach: `A — Deterministic Textual Fact`.
-- Branch final HEAD: `47b7c6bacd5f0d74a184a61ea5ae5d7f94401c5f`.
 - PR #2: CLOSED / MERGED.
 - Merge commit: `65a3100d86b111e10e696f086ea39a448bb1c05a`.
-- Validated product-code HEAD: `de8185ed1a152c12828bee02a4c8acc3398a6d7d`.
-- Canonical product-code CI: `31972155005` / job `95226131010` — PASS.
-- Final branch CI: `31972682881` / job `95227446058` — PASS.
 - Post-merge `main` CI: `31991656625` / job `95276180583` — PASS.
-- Automated tests: 53/53 PASS.
-- Browser E2E: 2/2 PASS.
 - Evidence: `docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md`.
 - Independent audit: `docs/audits/SLICE-01-INDEPENDENT-MCF-AUDIT-001.md` — `PASS_FOR_GATE`.
 - PRF: `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/`.
-- Open Critical findings: `0`.
-- Open Important findings: `0`.
-- Open review threads: `0`.
 - LÉO gate: PASS.
 - HUMAN_GATE: APPROVED by LEANDRO.
 
+## SLICE 02 pre-merge evidence
+
+- Approved boundary: append-only correction and history for textual content only.
+- Pull request: `#4 — SLICE 02: correction and history` — OPEN / NOT MERGED.
+- Validated branch HEAD: `361214e97e9b70df7092ee1f6d5c3944446edda0`.
+- Canonical pre-gate CI: `32000681041` / job `95300284264` — PASS.
+- Automated tests: `95/95` PASS across `25` test files.
+- Browser E2E: `3/3` PASS.
+- Physical correction schema: PASS.
+- Correction outage `503 SERVICE_UNAVAILABLE` proof: PASS.
+- Evidence: `docs/evidence/slice-02/SLICE-02-EVIDENCE-001.md`.
+- Checkpoint: `docs/checkpoints/MDP-SLICE-02-CHECKPOINT-001.md`.
+- PRF: being frozen at `artifacts/phases/SLICE-02-CORRECTION-HISTORY/`.
+- Independent Emily audit: NOT PERFORMED / NOT CLAIMED.
+- LÉO internal gate: NOT PERFORMED / NOT CLAIMED.
+- HUMAN_GATE for merge/completion: PENDING.
+- Merge authorization: NOT GRANTED.
+
 ## Current boundary
 
-Slice 01 is complete and integrated. Its delivered behavior remains the deterministic trusted-text boundary only.
+Slice 02 implementation and technical validation are complete on its branch, but the slice is not yet delivered, merged or post-merge validated. The delivered canonical product remains Slice 01 until governed integration of Slice 02 occurs.
 
-Real sensitive data remains prohibited. Pilot remains unauthorized. Slice 02 remains not started and unauthorized. No AI, embeddings, voice, offline, sync, corrections/history, purge or future-slice capability is implied by Slice 01 completion.
+Real sensitive data remains prohibited. Pilot remains unauthorized. Slice 03 remains unauthorized. No offline, sync, semantic retrieval, AI, voice, reminders, purge or other future-slice capability is implied by Slice 02 technical readiness.
 
 ## Next action
 
-No product implementation action is currently authorized. The next governed product step is to define and authorize the next boundary before starting Slice 02.
+Freeze and verify the Slice 02 PRF manifest, rerun full branch CI, then present the truthful pre-merge governance checkpoint to LEANDRO. Do not merge without explicit governed authorization.
