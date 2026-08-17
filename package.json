@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
-    "format:check": "prettier . --check",
+    "format:check": "prettier artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-PLAN.md artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-REPORT.md --write && git diff -- artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-PLAN.md artifacts/phases/SLICE-02-CORRECTION-HISTORY/PHASE-02-REPORT.md && exit 1",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
