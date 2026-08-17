@@ -1,9 +1,5 @@
 export type CorrectionDomainErrorCode =
-  | 'EMPTY_CORRECTION'
-  | 'TEXT_TOO_LONG'
-  | 'NO_CHANGE'
-  | 'REASON_TOO_LONG'
-  | 'BROKEN_HISTORY';
+  'EMPTY_CORRECTION' | 'TEXT_TOO_LONG' | 'NO_CHANGE' | 'REASON_TOO_LONG' | 'BROKEN_HISTORY';
 
 export class CorrectionDomainError extends Error {
   constructor(readonly code: CorrectionDomainErrorCode) {
@@ -167,10 +163,7 @@ export function orderTextFactHistory(
     cursor = successor.get(cursor.factId);
   }
 
-  if (
-    ordered.length !== nodes.length ||
-    ordered.at(-1)?.factId !== currentFactId
-  ) {
+  if (ordered.length !== nodes.length || ordered.at(-1)?.factId !== currentFactId) {
     throw new CorrectionDomainError('BROKEN_HISTORY');
   }
 
