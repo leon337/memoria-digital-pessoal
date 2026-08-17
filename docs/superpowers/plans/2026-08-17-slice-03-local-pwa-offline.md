@@ -4,85 +4,79 @@
 
 **Goal:** Make the existing textual-memory PWA fully usable on one browser/device without network access by moving the active web persistence path to IndexedDB while preserving all Slice 01–02 trust, history, concurrency, and regression guarantees.
 
-**Architecture:** Add a browser-side `MemoryRepository` boundary and a native IndexedDB implementation backed by the five approved product stores. The React PWA depends on that repository instead of `memory-api.ts`; the NestJS/PostgreSQL path remains intact for regression and future synchronization. `vite-plugin-pwa` supplies a versioned app-shell Service Worker with prompt-based controlled updates; memory data never enters Cache Storage.
+**Architecture:** Add a browser-side `MemoryRepository` boundary and a native IndexedDB implementation backed by the five approved product stores. React depends on that repository instead of the HTTP memory client; NestJS/PostgreSQL remains intact for cumulative regression and future synchronization. `vite-plugin-pwa` generates a versioned app-shell Service Worker with prompt-based update behavior; user memory data never enters Cache Storage.
 
-**Tech Stack:** React 19-style current workspace React, TypeScript 6.0.3, Vite, Vitest, fake-indexeddb for Node-side IndexedDB tests, Playwright Chromium for browser acceptance, native IndexedDB, `@mdp/domain`, `@mdp/contracts`, `@mdp/shared`, vite-plugin-pwa/Workbox-generated app-shell precache.
+**Tech Stack:** Current workspace React + TypeScript 6.0.3 + Vite + Vitest, native IndexedDB, `fake-indexeddb` for fast isolated DB tests, Playwright Chromium for real-browser acceptance, `@mdp/domain`, `@mdp/contracts`, `@mdp/shared`, and `vite-plugin-pwa`/Workbox for the app shell.
 
 ## Global Constraints
 
-- Planning baseline: approved spec `docs/superpowers/specs/2026-08-17-slice-03-local-pwa-offline-design.md` on `design/slice-03-local-offline`.
-- Product implementation is **not authorized by this plan**. Before Task 1, LEANDRO must explicitly authorize Slice 03 implementation.
-- At execution time, verify live `main` again and create a fresh `slice/03-local-offline` worktree/branch from that exact live `main` using the Superpowers worktree workflow. Do not implement on the design branch and do not write directly to `main`.
-- Local database name is exactly `mdp-local`.
-- Shipping IndexedDB schema version is exactly `2`.
-- Version `1` creates exactly five product object stores: `memories`, `evidence`, `ledgerEvents`, `facts`, `currentFacts`.
-- Version `2` adds indexes only; valid version-1 canonical content is not rewritten or discarded.
-- `@mdp/domain` must not import or reference IndexedDB, Service Worker, `window`, `navigator`, Cache Storage, Vite PWA tooling, or any browser infrastructure API.
-- Browser memory operations reuse `createMemoryRequestSchema`, `memoryQuerySchema`, `correctMemoryRequestSchema`, `createTextMemoryRecord`, `createTextCorrectionRecord`, `orderTextFactHistory`, and UUID v7 generation from `@mdp/shared`.
-- Active Slice 03 PWA memory path is IndexedDB only. No API/IndexedDB runtime switching, HTTP fallback, dual-write, import, export, queued mutation, Background Sync, or synchronization.
-- Offline covers create, query, correct, history, and append-only restore.
-- Mutations are all-or-nothing IndexedDB transactions and publish success only after transaction completion.
-- Original Evidence, LedgerEvent, and Fact records remain append-only/immutable; only `CurrentFact` projection moves.
-- Correction/restore uses `expectedCurrentFactId`; stale state cannot silently win.
-- Root Facts omit the persisted `supersedesFactId` property; the adapter maps the missing key to domain/history `null`.
-- The `facts.supersedesFactId` IndexedDB index is unique for correction facts.
-- `currentFacts` is keyed by `factId`; do not add a global unique `memoryId` index.
-- `CurrentFact.recordedAt` stays the original memory recording time through corrections/restores.
-- Normal query reads current projection only and preserves deterministic case-insensitive substring matching with newest `recordedAt`, then ascending `factId` tie-break.
-- Local errors include `VALIDATION_FAILED`, `NOT_FOUND`, `STALE_CORRECTION`, `NO_CHANGE`, `LOCAL_STORAGE_UNAVAILABLE`, `LOCAL_DATA_INTEGRITY_ERROR` and must not leak submitted text, IndexedDB internals, stack traces, store dumps, or technical UUIDs.
-- Hidden automatic retries are forbidden for local mutations.
-- Service Worker caches only app shell/versioned static assets; memory/API responses are never cached as product data.
-- New Service Worker versions use controlled prompt behavior and do not force takeover during active work.
-- API readiness is not a gate for healthy local memory operations.
-- Real sensitive data remains `NOT AUTHORIZED`; pilot remains `NOT AUTHORIZED`; all tests use synthetic data.
-- Cumulative Slice 01–02 PostgreSQL/API tests, E2E, schema checks, PRF manifests, build/runtime checks, and outage proof remain mandatory.
-- Universal DoD remains: implementation → automated tests → E2E → acceptance → invariants → evidence → review → CI → gate.
+- Approved specification: `docs/superpowers/specs/2026-08-17-slice-03-local-pwa-offline-design.md`.
+- This plan does **not** authorize implementation. Task 1 begins only after separate explicit authorization from LEANDRO.
+- At execution time, re-read live `main`, invoke `superpowers:using-git-worktrees`, and create a fresh `slice/03-local-offline` branch/worktree from that exact live `main`. Never implement on the design branch or directly on `main`.
+- Local DB name: exactly `mdp-local`.
+- Shipping local schema version: exactly `2`.
+- V1 creates exactly five stores: `memories`, `evidence`, `ledgerEvents`, `facts`, `currentFacts`.
+- V2 adds indexes only and preserves valid v1 content.
+- `@mdp/domain` remains independent from IndexedDB, Service Worker, Cache Storage, `window`, `navigator`, and Vite PWA infrastructure.
+- Browser logic reuses `createMemoryRequestSchema`, `memoryQuerySchema`, `correctMemoryRequestSchema`, `createTextMemoryRecord`, `createTextCorrectionRecord`, `orderTextFactHistory`, and UUID v7 generation from `@mdp/shared`.
+- Slice 03 PWA persistence is IndexedDB-only. No API fallback, dual-write, import, export, queued mutation, Background Sync, or synchronization.
+- Offline operations: create, query, correct, history, append-only restore.
+- Mutations publish success only after the encompassing IndexedDB transaction completes.
+- Evidence, LedgerEvent, and Fact remain append-only; CurrentFact is the mutable reconstructible projection.
+- Corrections/restores require `expectedCurrentFactId`; stale state cannot silently win.
+- Root Facts omit the persisted `supersedesFactId` key; adapter maps missing root key to `null` in domain/history shapes.
+- `facts.supersedesFactId` index is unique for correction records.
+- `currentFacts` is keyed by `factId`; its `memoryId` index is non-unique.
+- `CurrentFact.recordedAt` preserves original memory recording time through corrections/restores.
+- Query reads CurrentFact only, case-insensitive substring, newest `recordedAt` first, ascending `factId` as tie-break.
+- Stable local operation error codes: `VALIDATION_FAILED`, `NOT_FOUND`, `STALE_CORRECTION`, `NO_CHANGE`, `LOCAL_STORAGE_UNAVAILABLE`, `LOCAL_DATA_INTEGRITY_ERROR`.
+- Errors must not leak submitted memory text, stack traces, object-store dumps, raw storage errors, or technical UUIDs.
+- No hidden automatic retry for local mutations.
+- Service Worker caches only app-shell/versioned static assets and never caches memory API responses as product data.
+- New Service Workers wait; activation is user-controlled rather than unconditional mid-session takeover.
+- API readiness/connectivity cannot disable healthy local memory operations.
+- Real sensitive data remains `NOT AUTHORIZED`; pilot remains `NOT AUTHORIZED`; all implementation evidence uses synthetic data.
+- Existing Slice 01–02 PostgreSQL/API tests, physical schema checks, PRF manifests, build/runtime checks, E2E, and real PostgreSQL outage proof remain mandatory.
+- Universal DoD remains implementation → automated tests → E2E → acceptance → invariants → evidence → review → CI → gate.
 
 ---
 
 ## File Structure Map
 
-### Browser repository boundary
+### Browser persistence
 
-- Create `apps/web/src/lib/memory-repository.ts` — persistence-neutral browser application interface and local error model.
-- Create `apps/web/src/lib/indexeddb/mdp-local-db.ts` — IndexedDB schema types, versioned migrations, open/request/transaction helpers.
-- Create `apps/web/src/lib/indexeddb/indexeddb-memory-repository.ts` — local implementation of create/query/correct/history.
-- Create `apps/web/src/lib/indexeddb/mdp-local-db.test.ts` — schema/migration tests using isolated fake `IDBFactory` instances.
-- Create `apps/web/src/lib/indexeddb/indexeddb-memory-repository.test.ts` — repository transaction, query, history, concurrency, corruption, and reopen tests.
+- Create `apps/web/src/lib/memory-repository.ts` — browser application contract + safe local error model.
+- Create `apps/web/src/lib/indexeddb/mdp-local-db.ts` — five-store types, DB v1/v2 migrations, request/transaction helpers.
+- Create `apps/web/src/lib/indexeddb/indexeddb-memory-repository.ts` — IndexedDB create/query/correct/history implementation.
+- Create `apps/web/src/lib/indexeddb/mdp-local-db.test.ts` — schema, index, migration tests.
+- Create `apps/web/src/lib/indexeddb/indexeddb-memory-repository.test.ts` — atomicity, query, correction, history, restore, concurrency, integrity, reopen tests.
 
-### React composition
+### React
 
-- Modify `apps/web/src/App.tsx` — local repository readiness + connectivity status; remove API readiness as an enablement gate.
-- Modify `apps/web/src/App.test.tsx` — local readiness/offline tests and synthetic-only warning regression.
-- Modify `apps/web/src/main.tsx` — construct the IndexedDB repository and inject it into `App`.
-- Modify `apps/web/src/features/memory/StoreMemoryForm.tsx` and test — call repository `create`.
-- Modify `apps/web/src/features/memory/QueryMemoryForm.tsx` and test — call repository `query` and pass repository to found result.
-- Modify `apps/web/src/features/memory/MemoryFoundResult.tsx` and test — call repository `correct/history`, map local errors, preserve stale behavior, and stop rendering technical Evidence/Event UUIDs.
-- Create `apps/web/src/lib/use-connectivity.ts` and test — informational browser Online/Offline state.
+- Modify `apps/web/src/App.tsx` and test — local readiness and Online/Offline state; API readiness no longer gates forms.
+- Modify `apps/web/src/main.tsx` — instantiate and inject the local repository.
+- Modify `StoreMemoryForm`, `QueryMemoryForm`, `MemoryFoundResult` and their tests — repository dependency instead of HTTP helpers.
+- Create `apps/web/src/lib/use-connectivity.ts` and test — informational connectivity hook.
+- Preserve `apps/web/src/lib/memory-api.ts` and its tests as API regression/future synchronization infrastructure.
 
-### PWA shell
+### PWA
 
-- Modify `apps/web/package.json` and `pnpm-lock.yaml` — add workspace dependencies required by the browser repository plus `fake-indexeddb` and `vite-plugin-pwa` development dependencies.
-- Modify `apps/web/vite.config.ts` — configure PWA manifest, static app-shell precache, prompt update behavior, and no runtime API cache.
-- Modify `apps/web/tsconfig.app.json` — add vite-plugin-pwa React virtual-module types.
-- Modify `apps/web/index.html` — theme metadata and generated static PWA icon links.
-- Create `apps/web/public/logo.svg`, `apps/web/public/pwa-64x64.png`, `apps/web/public/pwa-192x192.png`, `apps/web/public/pwa-512x512.png`, `apps/web/public/maskable-icon-512x512.png`, `apps/web/public/apple-touch-icon-180x180.png`, `apps/web/public/favicon.ico` — installability assets generated from one source mark.
-- Create `apps/web/src/features/pwa/PwaUpdateNotice.tsx` and test — controlled waiting-worker prompt.
-- Modify `apps/web/src/index.css` — compact connectivity/local-readiness/update-notice styling only.
-- Create `scripts/verify-slice03-pwa.mjs` — built-artifact assertions for manifest/SW/cache boundary.
+- Modify `apps/web/package.json`, `pnpm-lock.yaml`, `apps/web/vite.config.ts`, `apps/web/tsconfig.app.json`, `apps/web/index.html`.
+- Create `apps/web/public/logo.svg` and generated standard PWA raster assets.
+- Create `apps/web/src/features/pwa/PwaUpdateNotice.tsx` and test.
+- Create `scripts/verify-slice03-pwa.mjs`.
+- Modify `apps/web/src/index.css` only for status/update-notice presentation.
 
-### Acceptance and governance
+### Acceptance/governance
 
-- Create `playwright.offline.config.ts` — isolated one-worker browser acceptance with web preview only and no API server.
-- Create `tests/e2e/local-offline.spec.ts` — offline reopen, full memory flow, local failure, v1→v2 browser migration, multi-tab stale, and Service Worker update preservation.
-- Modify `package.json` — add `e2e:offline` and PWA verification scripts.
-- Create `tests/architecture/slice-03-scope.test.ts` — boundary guards against browser infrastructure in domain and HTTP fallback in active web memory components.
-- Modify `.github/workflows/ci.yml` — preserve all existing checks and add Slice 03 verification.
-- Create `docs/evidence/slice-03/SLICE-03-EVIDENCE-001.md`, `docs/checkpoints/MDP-SLICE-03-CHECKPOINT-001.md`, `docs/phases/SLICE-03.md`, and `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/*` only after technical acceptance is green.
+- Create `playwright.offline.config.ts` and `tests/e2e/local-offline.spec.ts`.
+- Create `tests/architecture/slice-03-scope.test.ts`.
+- Modify root `package.json` and `.github/workflows/ci.yml`.
+- After technical GREEN, create Slice 03 evidence/checkpoint/phase/PRF artifacts from observed outputs only.
 
 ---
 
-### Task 1: Browser MemoryRepository contract and local error model
+### Task 1: Define the browser MemoryRepository boundary
 
 **Files:**
 - Modify: `apps/web/package.json`
@@ -91,46 +85,18 @@
 - Create: `apps/web/src/lib/memory-repository.test.ts`
 
 **Interfaces:**
-- Consumes: existing `CreateMemoryResponse`, `MemoryQueryResponse`, `CorrectMemoryRequest`, `CorrectMemoryResponse`, `MemoryHistoryResponse` from `@mdp/contracts`.
-- Produces: `MemoryRepository`, `MemoryRepositoryError`, `MemoryRepositoryErrorCode`; later tasks depend on these exact names.
+- Consumes: current contract response/request types from `@mdp/contracts`.
+- Produces: `MemoryRepository`, `MemoryRepositoryError`, `MemoryRepositoryErrorCode`.
 
-- [ ] **Step 1: Add the browser domain/shared dependencies and fake IndexedDB test dependency**
+- [ ] **Step 1: Add browser workspace/test dependencies**
 
-Update `apps/web/package.json` so runtime workspace dependencies include `@mdp/domain` and `@mdp/shared`, and dev dependencies include `fake-indexeddb`:
-
-```json
-{
-  "dependencies": {
-    "@mdp/contracts": "workspace:*",
-    "@mdp/domain": "workspace:*",
-    "@mdp/shared": "workspace:*",
-    "react": "latest",
-    "react-dom": "latest",
-    "zod": "latest"
-  },
-  "devDependencies": {
-    "@testing-library/jest-dom": "latest",
-    "@testing-library/react": "latest",
-    "@testing-library/user-event": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
-    "fake-indexeddb": "latest",
-    "jsdom": "latest",
-    "vite": "latest"
-  }
-}
-```
-
-Run:
+Add `@mdp/domain` and `@mdp/shared` under `dependencies`, and `fake-indexeddb` under `devDependencies`, preserving the repository's existing `workspace:*`/`latest` conventions. Run:
 
 ```bash
 pnpm install
 ```
 
-Expected: lockfile updates without replacing existing workspace dependency ranges.
-
-- [ ] **Step 2: Write the failing repository-boundary test**
+- [ ] **Step 2: Write the failing error-contract test**
 
 Create `apps/web/src/lib/memory-repository.test.ts`:
 
@@ -146,26 +112,24 @@ describe('MemoryRepositoryError', () => {
     'NO_CHANGE',
     'LOCAL_STORAGE_UNAVAILABLE',
     'LOCAL_DATA_INTEGRITY_ERROR',
-  ] as const)('preserves stable code %s without exposing a storage cause', (code) => {
-    const error = new MemoryRepositoryError(code, new Error('private database detail'));
+  ] as const)('keeps stable safe code %s', (code) => {
+    const error = new MemoryRepositoryError(code, new Error('private storage detail'));
     expect(error.code).toBe(code);
     expect(error.message).toBe(code);
-    expect(error.message).not.toContain('private database detail');
+    expect(error.message).not.toContain('private storage detail');
   });
 });
 ```
 
-- [ ] **Step 3: Run the focused test and confirm RED**
-
-Run:
+- [ ] **Step 3: Verify RED**
 
 ```bash
 pnpm --filter @mdp/web test -- src/lib/memory-repository.test.ts
 ```
 
-Expected: FAIL because `memory-repository.ts` does not exist.
+Expected: FAIL because the module does not exist.
 
-- [ ] **Step 4: Implement the minimal stable browser repository contract**
+- [ ] **Step 4: Implement the exact repository contract**
 
 Create `apps/web/src/lib/memory-repository.ts`:
 
@@ -205,21 +169,17 @@ export interface MemoryRepository {
 }
 ```
 
-Do not add an HTTP fallback method and do not import `memory-api.ts` here.
+There is deliberately no HTTP fallback method.
 
-- [ ] **Step 5: Run focused test, typecheck, and boundary regression**
-
-Run:
+- [ ] **Step 5: Verify GREEN and old architecture regression**
 
 ```bash
 pnpm --filter @mdp/web test -- src/lib/memory-repository.test.ts
 pnpm typecheck
-pnpm test -- --run tests/architecture/slice-01-scope.test.ts tests/architecture/slice-02-scope.test.ts
+pnpm exec vitest run tests/architecture/slice-01-scope.test.ts tests/architecture/slice-02-scope.test.ts
 ```
 
-Expected: all PASS.
-
-- [ ] **Step 6: Commit Task 1**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add apps/web/package.json pnpm-lock.yaml apps/web/src/lib/memory-repository.ts apps/web/src/lib/memory-repository.test.ts
@@ -228,19 +188,18 @@ git commit -m "feat(slice03): define browser memory repository"
 
 ---
 
-### Task 2: IndexedDB v1/v2 schema and non-destructive migration
+### Task 2: Add IndexedDB v1/v2 schema and migration
 
 **Files:**
 - Create: `apps/web/src/lib/indexeddb/mdp-local-db.ts`
 - Create: `apps/web/src/lib/indexeddb/mdp-local-db.test.ts`
 
 **Interfaces:**
-- Consumes: native `IDBFactory`, `IDBDatabase`, `IDBTransaction`, `IDBRequest`.
-- Produces: `MDP_LOCAL_DB_NAME`, `MDP_LOCAL_DB_VERSION`, `PRODUCT_STORES`, local record interfaces, `openMdpLocalDatabase`, `applyMdpLocalUpgrade`, `requestAsPromise`, `transactionDone`.
+- Produces: `MDP_LOCAL_DB_NAME`, `MDP_LOCAL_DB_VERSION`, `PRODUCT_STORES`, local record interfaces, `applyMdpLocalUpgrade`, `openMdpLocalDatabase`, `requestAsPromise`, `transactionDone`.
 
-- [ ] **Step 1: Write schema/migration RED tests with isolated IDBFactory**
+- [ ] **Step 1: Write failing schema tests**
 
-Create `apps/web/src/lib/indexeddb/mdp-local-db.test.ts` with Node test environment and isolated factories:
+Use Node test environment and `IDBFactory` from `fake-indexeddb`:
 
 ```ts
 // @vitest-environment node
@@ -252,69 +211,59 @@ import {
   PRODUCT_STORES,
   applyMdpLocalUpgrade,
   openMdpLocalDatabase,
+  requestAsPromise,
   transactionDone,
 } from './mdp-local-db.js';
 
 function openAt(factory: IDBFactory, version: 1 | 2): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = factory.open(MDP_LOCAL_DB_NAME, version);
-    request.onupgradeneeded = () => {
-      applyMdpLocalUpgrade(request.result, request.transaction!, request.oldVersion, version);
+    request.onupgradeneeded = (event) => {
+      applyMdpLocalUpgrade(request.result, request.transaction!, event.oldVersion, version);
     };
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
   });
 }
 
-describe('mdp-local schema', () => {
-  it('ships version 2 with exactly five product stores', async () => {
-    const db = await openMdpLocalDatabase(new IDBFactory());
-    expect(db.version).toBe(MDP_LOCAL_DB_VERSION);
-    expect([...db.objectStoreNames]).toEqual([...PRODUCT_STORES]);
-    db.close();
-  });
+it('ships v2 with exactly five product stores', async () => {
+  const db = await openMdpLocalDatabase(new IDBFactory());
+  expect(db.version).toBe(MDP_LOCAL_DB_VERSION);
+  expect([...db.objectStoreNames]).toEqual([...PRODUCT_STORES]);
+  db.close();
+});
 
-  it('upgrades a seeded version-1 database by adding indexes without rewriting records', async () => {
-    const factory = new IDBFactory();
-    const v1 = await openAt(factory, 1);
-    const tx = v1.transaction(PRODUCT_STORES, 'readwrite');
-    tx.objectStore('memories').add({
-      id: '0198aa00-0000-7000-8000-000000000001',
-      recordedAt: new Date('2026-08-17T07:00:00.000Z'),
-      occurredAt: null,
-      temporalPrecision: 'unknown',
-    });
-    await transactionDone(tx);
-    v1.close();
-
-    const v2 = await openMdpLocalDatabase(factory);
-    expect(v2.version).toBe(2);
-    expect(v2.transaction('evidence').objectStore('evidence').indexNames.contains('memoryId')).toBe(true);
-    expect(v2.transaction('facts').objectStore('facts').index('supersedesFactId').unique).toBe(true);
-    expect(v2.transaction('currentFacts').objectStore('currentFacts').index('memoryId').unique).toBe(false);
-    expect(await new Promise((resolve, reject) => {
-      const request = v2.transaction('memories').objectStore('memories').get('0198aa00-0000-7000-8000-000000000001');
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    })).toBeTruthy();
-    v2.close();
+it('upgrades v1 by adding indexes without deleting seeded memory', async () => {
+  const factory = new IDBFactory();
+  const v1 = await openAt(factory, 1);
+  const write = v1.transaction('memories', 'readwrite');
+  write.objectStore('memories').add({
+    id: 'm-v1',
+    recordedAt: new Date('2026-08-17T07:00:00.000Z'),
+    occurredAt: null,
+    temporalPrecision: 'unknown',
   });
+  await transactionDone(write);
+  v1.close();
+
+  const v2 = await openMdpLocalDatabase(factory);
+  expect(v2.transaction('evidence').objectStore('evidence').indexNames.contains('memoryId')).toBe(true);
+  expect(v2.transaction('facts').objectStore('facts').index('supersedesFactId').unique).toBe(true);
+  expect(v2.transaction('currentFacts').objectStore('currentFacts').index('memoryId').unique).toBe(false);
+  expect(await requestAsPromise(v2.transaction('memories').objectStore('memories').get('m-v1'))).toBeTruthy();
+  v2.close();
 });
 ```
 
-- [ ] **Step 2: Run the schema test and confirm RED**
-
-Run:
+- [ ] **Step 2: Verify RED**
 
 ```bash
 pnpm --filter @mdp/web test -- src/lib/indexeddb/mdp-local-db.test.ts
 ```
 
-Expected: FAIL because schema helpers do not exist.
+- [ ] **Step 3: Implement exact DB constants, types, and ordered upgrades**
 
-- [ ] **Step 3: Implement exact local record types and migration helpers**
-
-Create `apps/web/src/lib/indexeddb/mdp-local-db.ts` around these exact public constants and record shapes:
+The public constants and store order are:
 
 ```ts
 export const MDP_LOCAL_DB_NAME = 'mdp-local';
@@ -326,53 +275,11 @@ export const PRODUCT_STORES = [
   'facts',
   'currentFacts',
 ] as const;
-
-export interface LocalMemoryRecord {
-  id: string;
-  recordedAt: Date;
-  occurredAt: null;
-  temporalPrecision: 'unknown';
-}
-
-export interface LocalEvidenceRecord {
-  id: string;
-  memoryId: string;
-  kind: 'text';
-  content: string;
-  createdAt: Date;
-}
-
-export interface LocalLedgerEventRecord {
-  id: string;
-  memoryId: string;
-  evidenceId: string;
-  factId?: string;
-  supersedesFactId?: string;
-  type: 'MEMORY_CREATED' | 'MEMORY_CORRECTED';
-  reason?: string | null;
-  createdAt: Date;
-}
-
-export interface LocalFactRecord {
-  id: string;
-  memoryId: string;
-  evidenceId: string;
-  kind: 'autobiographical_statement';
-  content: string;
-  supersedesFactId?: string;
-  createdAt: Date;
-}
-
-export interface LocalCurrentFactRecord {
-  factId: string;
-  memoryId: string;
-  evidenceId: string;
-  content: string;
-  recordedAt: Date;
-}
 ```
 
-Implement ordered upgrades:
+Record types mirror PostgreSQL conceptually. Correction-only fields are optional in local event/fact record interfaces so root/creation records omit those properties.
+
+V1:
 
 ```ts
 function upgradeToV1(db: IDBDatabase): void {
@@ -382,19 +289,25 @@ function upgradeToV1(db: IDBDatabase): void {
   db.createObjectStore('facts', { keyPath: 'id' });
   db.createObjectStore('currentFacts', { keyPath: 'factId' });
 }
+```
 
+V2:
+
+```ts
 function upgradeToV2(transaction: IDBTransaction): void {
   transaction.objectStore('evidence').createIndex('memoryId', 'memoryId');
   transaction.objectStore('ledgerEvents').createIndex('memoryId', 'memoryId');
   transaction.objectStore('ledgerEvents').createIndex('factId', 'factId');
   transaction.objectStore('ledgerEvents').createIndex('supersedesFactId', 'supersedesFactId');
   transaction.objectStore('facts').createIndex('memoryId', 'memoryId');
-  transaction.objectStore('facts').createIndex('supersedesFactId', 'supersedesFactId', {
-    unique: true,
-  });
+  transaction.objectStore('facts').createIndex('supersedesFactId', 'supersedesFactId', { unique: true });
   transaction.objectStore('currentFacts').createIndex('memoryId', 'memoryId');
 }
+```
 
+Upgrade dispatcher:
+
+```ts
 export function applyMdpLocalUpgrade(
   db: IDBDatabase,
   transaction: IDBTransaction,
@@ -406,9 +319,9 @@ export function applyMdpLocalUpgrade(
 }
 ```
 
-Implement `openMdpLocalDatabase(factory = indexedDB)` so `onupgradeneeded` calls `applyMdpLocalUpgrade` and any open/upgrade failure rejects; never call `deleteDatabase` in production code.
+`openMdpLocalDatabase(factory = indexedDB)` opens version 2 and invokes this dispatcher from `onupgradeneeded`. Production code never calls `deleteDatabase` as an upgrade strategy.
 
-Implement request/transaction completion helpers:
+Request helper:
 
 ```ts
 export function requestAsPromise<T>(request: IDBRequest<T>): Promise<T> {
@@ -417,47 +330,22 @@ export function requestAsPromise<T>(request: IDBRequest<T>): Promise<T> {
     request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
   });
 }
-
-export function transactionDone(transaction: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'));
-    transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed'));
-  });
-}
 ```
 
-- [ ] **Step 4: Add explicit root-key and uniqueness tests**
+Transaction helper resolves only on `complete`, rejects on `abort`/`error`.
 
-Extend `mdp-local-db.test.ts` to prove that two root facts without the `supersedesFactId` property can coexist, while two correction facts pointing to the same predecessor cannot commit:
+- [ ] **Step 4: Add root/fork persistence defense test**
 
-```ts
-it('indexes only correction predecessors and rejects a fork', async () => {
-  const db = await openMdpLocalDatabase(new IDBFactory());
-  const tx = db.transaction('facts', 'readwrite');
-  const facts = tx.objectStore('facts');
-  facts.add({ id: 'root-a', memoryId: 'm-a', evidenceId: 'e-a', kind: 'autobiographical_statement', content: 'A', createdAt: new Date() });
-  facts.add({ id: 'root-b', memoryId: 'm-b', evidenceId: 'e-b', kind: 'autobiographical_statement', content: 'B', createdAt: new Date() });
-  await transactionDone(tx);
+Use two root Fact records that omit `supersedesFactId`; they must commit. In a later transaction add two correction Facts with the same `supersedesFactId: 'root-a'`; `transactionDone()` must reject. This proves independent roots are allowed while one predecessor cannot fork.
 
-  const fork = db.transaction('facts', 'readwrite');
-  fork.objectStore('facts').add({ id: 'next-a', memoryId: 'm-a', evidenceId: 'e-a2', kind: 'autobiographical_statement', content: 'A2', supersedesFactId: 'root-a', createdAt: new Date() });
-  fork.objectStore('facts').add({ id: 'next-b', memoryId: 'm-a', evidenceId: 'e-a3', kind: 'autobiographical_statement', content: 'A3', supersedesFactId: 'root-a', createdAt: new Date() });
-  await expect(transactionDone(fork)).rejects.toBeTruthy();
-  db.close();
-});
-```
-
-- [ ] **Step 5: Run focused tests and full web typecheck**
+- [ ] **Step 5: Verify GREEN**
 
 ```bash
 pnpm --filter @mdp/web test -- src/lib/indexeddb/mdp-local-db.test.ts
 pnpm --filter @mdp/web typecheck
 ```
 
-Expected: PASS.
-
-- [ ] **Step 6: Commit Task 2**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/lib/indexeddb/mdp-local-db.ts apps/web/src/lib/indexeddb/mdp-local-db.test.ts
@@ -466,83 +354,109 @@ git commit -m "feat(slice03): add versioned local database"
 
 ---
 
-### Task 3: IndexedDB create/query repository path
+### Task 3: Implement local create and current-only query
 
 **Files:**
 - Create: `apps/web/src/lib/indexeddb/indexeddb-memory-repository.ts`
 - Create: `apps/web/src/lib/indexeddb/indexeddb-memory-repository.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1 `MemoryRepository`; Task 2 DB helpers; `createMemoryRequestSchema`, `memoryQuerySchema`, `createTextMemoryRecord`, `createId`.
-- Produces: `IndexedDbMemoryRepository` implementing `ready/create/query`; Task 4 completes `correct/history`.
+- Consumes: Task 2 DB helpers, `createMemoryRequestSchema`, `memoryQuerySchema`, `createTextMemoryRecord`, `createId`.
+- Produces: `IndexedDbMemoryRepository.ready/create/query`. Do **not** declare `implements MemoryRepository` until Task 4 adds `correct/history`.
 
-- [ ] **Step 1: Write RED tests for creation, atomic rollback, query, tie-break, and reopen**
+- [ ] **Step 1: Write fully concrete failing tests**
 
-Start `indexeddb-memory-repository.test.ts` with isolated deterministic dependencies:
+Create a deterministic ID helper:
 
 ```ts
-// @vitest-environment node
-import { IDBFactory } from 'fake-indexeddb';
-import { describe, expect, it } from 'vitest';
-import { IndexedDbMemoryRepository } from './indexeddb-memory-repository.js';
-
 function ids(...values: string[]): () => string {
   const queue = [...values];
   return () => {
     const value = queue.shift();
-    if (!value) throw new Error('test id queue exhausted');
+    if (value === undefined) throw new Error('test id queue exhausted');
     return value;
   };
 }
+```
 
-it('creates one complete local memory and returns the stable contract shape', async () => {
-  const factory = new IDBFactory();
+Creation contract test:
+
+```ts
+it('creates a complete local memory and preserves valid original whitespace', async () => {
   const repository = new IndexedDbMemoryRepository({
-    factory,
+    factory: new IDBFactory(),
     now: () => new Date('2026-08-17T07:00:00.000Z'),
     createId: ids('m1', 'e1', 'ev1', 'f1'),
   });
-  await expect(repository.create('  Memória sintética preservada.  ')).resolves.toMatchObject({
+  await expect(repository.create('  Memória sintética preservada.  ')).resolves.toEqual({
     memory: { id: 'm1', recordedAt: '2026-08-17T07:00:00.000Z' },
     fact: { id: 'f1', content: '  Memória sintética preservada.  ' },
     provenance: { evidenceId: 'e1' },
   });
 });
+```
 
-it('rolls back all earlier store writes when a later add fails', async () => {
+Atomic rollback test:
+
+```ts
+it('rolls back all stores when a later add violates a key constraint', async () => {
   const factory = new IDBFactory();
-  const first = new IndexedDbMemoryRepository({ factory, createId: ids('m1', 'e1', 'ev1', 'f1') });
-  await first.create('Primeiro registro sintético.');
+  await new IndexedDbMemoryRepository({
+    factory,
+    createId: ids('m1', 'e1', 'ev1', 'f1'),
+  }).create('Primeiro registro sintético.');
 
-  const second = new IndexedDbMemoryRepository({ factory, createId: ids('m2', 'e2', 'ev2', 'f1') });
-  await expect(second.create('Segundo registro sintético.')).rejects.toMatchObject({
+  const failing = new IndexedDbMemoryRepository({
+    factory,
+    createId: ids('m2', 'e2', 'ev2', 'f1'),
+  });
+  await expect(failing.create('Segundo registro sintético.')).rejects.toMatchObject({
     code: 'LOCAL_DATA_INTEGRITY_ERROR',
   });
-  await expect(first.query('Segundo registro')).resolves.toEqual({ status: 'UNKNOWN', answer: null, provenance: null });
-});
-
-it('queries only current facts, case-insensitively, with deterministic tie-break', async () => {
-  // Seed two records with controlled recordedAt values and assert newest, then factId ascending.
-});
-
-it('reopens the same factory without losing local records', async () => {
-  // Create with repository A, instantiate repository B over the same factory, query with B.
+  await expect(failing.query('Segundo registro')).resolves.toEqual({
+    status: 'UNKNOWN',
+    answer: null,
+    provenance: null,
+  });
 });
 ```
 
-Replace the two descriptive test bodies before committing with concrete seeding/assertions using deterministic dates/IDs; do not leave comment-only test bodies in the branch.
+Newest-record query test:
 
-- [ ] **Step 2: Run focused test and confirm RED**
+```ts
+it('returns the newest matching current fact', async () => {
+  const factory = new IDBFactory();
+  await new IndexedDbMemoryRepository({
+    factory,
+    now: () => new Date('2026-08-17T07:00:00.000Z'),
+    createId: ids('m1', 'e1', 'ev1', 'f-z'),
+  }).create('Registro sintético comum antigo.');
+  const repository = new IndexedDbMemoryRepository({
+    factory,
+    now: () => new Date('2026-08-17T08:00:00.000Z'),
+    createId: ids('m2', 'e2', 'ev2', 'f-b'),
+  });
+  await repository.create('Registro sintético comum novo.');
+  await expect(repository.query('COMUM')).resolves.toMatchObject({
+    status: 'FOUND',
+    provenance: { memoryId: 'm2', factId: 'f-b' },
+  });
+});
+```
+
+Stable tie-break test uses two matching records with the same `recordedAt`, fact IDs `f-b` and `f-a`, and asserts query returns `f-a`.
+
+Reopen test creates through repository A, creates repository B over the same `IDBFactory`, and asserts B can query A's content.
+
+- [ ] **Step 2: Verify RED**
 
 ```bash
 pnpm --filter @mdp/web test -- src/lib/indexeddb/indexeddb-memory-repository.test.ts
 ```
 
-Expected: FAIL because `IndexedDbMemoryRepository` does not exist.
+- [ ] **Step 3: Implement constructor/readiness and safe failure mapping**
 
-- [ ] **Step 3: Implement constructor/readiness and safe error mapping**
-
-Create `indexeddb-memory-repository.ts` with injected dependencies so tests never patch browser globals:
+Use injectable dependencies:
 
 ```ts
 interface IndexedDbMemoryRepositoryDependencies {
@@ -551,22 +465,16 @@ interface IndexedDbMemoryRepositoryDependencies {
   createId?: () => string;
 }
 
-export class IndexedDbMemoryRepository implements MemoryRepository {
+export class IndexedDbMemoryRepository {
   private readonly factory: IDBFactory;
   private readonly now: () => Date;
   private readonly nextId: () => string;
   private dbPromise: Promise<IDBDatabase> | null = null;
 
-  constructor(dependencies: IndexedDbMemoryRepositoryDependencies = {}) {
-    this.factory = dependencies.factory ?? indexedDB;
-    this.now = dependencies.now ?? (() => new Date());
-    this.nextId = dependencies.createId ?? createId;
-  }
-
-  ready(): Promise<void> {
-    return this.withMappedFailure(async () => {
-      await this.database();
-    });
+  constructor(deps: IndexedDbMemoryRepositoryDependencies = {}) {
+    this.factory = deps.factory ?? indexedDB;
+    this.now = deps.now ?? (() => new Date());
+    this.nextId = deps.createId ?? createId;
   }
 
   private database(): Promise<IDBDatabase> {
@@ -576,52 +484,19 @@ export class IndexedDbMemoryRepository implements MemoryRepository {
 }
 ```
 
-Use one private mapping helper. Preserve an existing `MemoryRepositoryError`; classify quota/unreadable/invalid-state/open failures as `LOCAL_STORAGE_UNAVAILABLE` and constraint/corruption/programmatic invariant failures as `LOCAL_DATA_INTEGRITY_ERROR`. The mapper must use safe stable codes only.
+`ready()` awaits `database()`. A private `withMappedFailure` preserves existing `MemoryRepositoryError`; storage availability names such as `QuotaExceededError`, `NotReadableError`, `InvalidStateError`, `UnknownError` map to `LOCAL_STORAGE_UNAVAILABLE`; constraint/invariant failures map to `LOCAL_DATA_INTEGRITY_ERROR`.
 
 - [ ] **Step 4: Implement transactional `create`**
 
-Use `createMemoryRequestSchema.safeParse({ text })`. On failure throw `MemoryRepositoryError('VALIDATION_FAILED')`. On success:
+Validate with `createMemoryRequestSchema.safeParse({ text })`. On failure throw `VALIDATION_FAILED`. Generate one timestamp and four IDs, call `createTextMemoryRecord`, open one `readwrite` transaction over all five stores, `add` complete Memory/Evidence/MEMORY_CREATED/Fact/CurrentFact records, and return only after `transactionDone(tx)`.
 
-```ts
-const recordedAt = this.now();
-const record = createTextMemoryRecord({
-  text: parsed.data.text,
-  recordedAt,
-  ids: {
-    memoryId: this.nextId(),
-    evidenceId: this.nextId(),
-    eventId: this.nextId(),
-    factId: this.nextId(),
-  },
-});
-```
+For the creation LedgerEvent, persist only `id`, `memoryId`, `evidenceId`, `type`, `createdAt`; do not persist correction-only properties with `null`/`undefined` values.
 
-Open one `readwrite` transaction across all `PRODUCT_STORES`, `add` the five records, omit correction-only keys from the `MEMORY_CREATED` event, then `await transactionDone(transaction)` before returning:
+- [ ] **Step 5: Implement deterministic `query`**
 
-```ts
-return {
-  memory: { id: record.memory.id, recordedAt: record.memory.recordedAt.toISOString() },
-  fact: { id: record.fact.id, content: record.fact.content },
-  provenance: { evidenceId: record.evidence.id },
-};
-```
+Validate/normalize using `memoryQuerySchema`. Read `currentFacts` only. Match `content.toLowerCase().includes(parsed.data.toLowerCase())`, sort newest `recordedAt` then ascending `factId`, and return exact existing `FOUND`/`UNKNOWN` contract shapes.
 
-- [ ] **Step 5: Implement deterministic current-only `query`**
-
-Validate with `memoryQuerySchema.safeParse(query)`. Read `currentFacts` only with a readonly transaction, normalize with `toLowerCase()`, filter `content.includes(normalized)`, then sort:
-
-```ts
-matches.sort((left, right) => {
-  const newest = right.recordedAt.getTime() - left.recordedAt.getTime();
-  return newest !== 0 ? newest : left.factId.localeCompare(right.factId);
-});
-```
-
-Return stable `FOUND` provenance or exact `UNKNOWN` shape.
-
-- [ ] **Step 6: Complete the concrete query/reopen tests and run GREEN**
-
-Use deterministic IDs and dates in every test. Commands:
+- [ ] **Step 6: Verify GREEN**
 
 ```bash
 pnpm --filter @mdp/web test -- src/lib/indexeddb/indexeddb-memory-repository.test.ts
@@ -629,9 +504,7 @@ pnpm --filter @mdp/web typecheck
 pnpm lint
 ```
 
-Expected: PASS.
-
-- [ ] **Step 7: Commit Task 3**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/lib/indexeddb/indexeddb-memory-repository.ts apps/web/src/lib/indexeddb/indexeddb-memory-repository.test.ts
@@ -640,42 +513,40 @@ git commit -m "feat(slice03): store and query memories locally"
 
 ---
 
-### Task 4: Local correction, history, restore, stale concurrency, and integrity checks
+### Task 4: Implement correction, history, restore, concurrency, and integrity
 
 **Files:**
 - Modify: `apps/web/src/lib/indexeddb/indexeddb-memory-repository.ts`
 - Modify: `apps/web/src/lib/indexeddb/indexeddb-memory-repository.test.ts`
 
 **Interfaces:**
-- Consumes: `correctMemoryRequestSchema`, `createTextCorrectionRecord`, `orderTextFactHistory`, Task 2 memoryId/factId indexes.
-- Produces: complete `IndexedDbMemoryRepository.correct()` and `.history()`.
+- Adds `correct()` and `history()`, then declares `IndexedDbMemoryRepository implements MemoryRepository`.
 
-- [ ] **Step 1: Add RED tests for correction and append-only restore**
+- [ ] **Step 1: Add failing Ana → Beatriz → Ana history/restore test**
 
-Add a synthetic Ana→Beatriz→Ana sequence. Assert after first correction:
+Create one memory with IDs `m1/e1/ev1/f1`. Configure correction IDs `e2/ev2/f2`, correct to Beatriz, then correction IDs `e3/ev3/f3`, restore Ana. Assert:
 
 ```ts
-await expect(repository.correct('m1', {
-  text: 'Minha irmã se chama Beatriz.',
-  expectedCurrentFactId: 'f1',
-  reason: 'Correção sintética',
-})).resolves.toMatchObject({
-  memoryId: 'm1',
-  current: { factId: 'f2', content: 'Minha irmã se chama Beatriz.' },
-  correction: { supersedesFactId: 'f1', reason: 'Correção sintética' },
+expect((await repository.query('Beatriz')).status).toBe('FOUND');
+expect((await repository.query('Ana')).status).toBe('UNKNOWN');
+
+await repository.correct('m1', {
+  text: 'Minha irmã se chama Ana.',
+  expectedCurrentFactId: 'f2',
 });
 
-await expect(repository.query('Ana')).resolves.toEqual({ status: 'UNKNOWN', answer: null, provenance: null });
 const history = await repository.history('m1');
 expect(history.versions.map((version) => version.content)).toEqual([
   'Minha irmã se chama Ana.',
   'Minha irmã se chama Beatriz.',
+  'Minha irmã se chama Ana.',
 ]);
+expect(history.versions.map((version) => version.isCurrent)).toEqual([false, false, true]);
 ```
 
-Then correct from current `f2` using the original text and assert a three-version chain; old Fact/Evidence/Event records must still exist.
+Also query Beatriz after restore and assert `UNKNOWN`.
 
-- [ ] **Step 2: Add RED tests for no-op, stale, same-base concurrency, fork defense, and corrupt history**
+- [ ] **Step 2: Add failing validation/no-op/stale/concurrency tests**
 
 Required assertions:
 
@@ -691,73 +562,52 @@ await expect(repository.correct('m1', {
 })).rejects.toMatchObject({ code: 'STALE_CORRECTION' });
 ```
 
-For cross-tab behavior, construct two repository instances over one `IDBFactory`, query the same `factId`, and submit two different corrections concurrently with `Promise.allSettled`. Assert exactly one fulfilled result and exactly one rejection with `STALE_CORRECTION`.
+For same-base concurrency, instantiate repository A and B over the same `IDBFactory`, both use `expectedCurrentFactId: 'f1'`, and submit different corrections with `Promise.allSettled`. Assert one result is fulfilled, one is rejected, and the rejected reason has `code === 'STALE_CORRECTION'`.
 
-For integrity behavior, directly seed a disconnected Fact or mismatched Evidence in a test transaction, call `history`, and assert `LOCAL_DATA_INTEGRITY_ERROR` with no raw content in the error message.
+- [ ] **Step 3: Add failing broken-history test**
 
-- [ ] **Step 3: Run focused tests and confirm RED**
+After a valid create, directly insert one Fact whose Evidence belongs to another memory or whose predecessor disconnects from the root. `repository.history('m1')` must reject with `LOCAL_DATA_INTEGRITY_ERROR`. Assert the error message is exactly the stable code and does not contain synthetic content or raw IDs.
+
+- [ ] **Step 4: Verify RED**
 
 ```bash
 pnpm --filter @mdp/web test -- src/lib/indexeddb/indexeddb-memory-repository.test.ts
 ```
 
-Expected: new correction/history tests FAIL because methods are not implemented.
+- [ ] **Step 5: Implement `correct` with validation before transaction and stale check inside transaction**
 
-- [ ] **Step 4: Implement stale-safe `correct` in one multi-store transaction**
+1. Validate `request` with `correctMemoryRequestSchema.safeParse()` before opening a write transaction; invalid input throws `VALIDATION_FAILED` with no storage mutation.
+2. Open one `readwrite` transaction over all five stores.
+3. Read target Memory; absent → `NOT_FOUND`.
+4. Read `currentFacts.index('memoryId').getAll(memoryId)`; require exactly one current textual projection.
+5. Compare `factId` with `expectedCurrentFactId`; mismatch → `STALE_CORRECTION` and abort/no writes.
+6. Generate correction IDs and call `createTextCorrectionRecord` with persisted current as `previous`.
+7. Add new Evidence, correction Fact with explicit predecessor, and `MEMORY_CORRECTED` event.
+8. Delete old CurrentFact by old `factId`, add new CurrentFact in the same transaction.
+9. Await `transactionDone()` before returning `CorrectMemoryResponse`.
 
-Inside one `readwrite` transaction over all five stores:
+Map `CorrectionDomainError`: `NO_CHANGE` → `NO_CHANGE`; empty/too-long text or reason → `VALIDATION_FAILED`; `BROKEN_HISTORY` → `LOCAL_DATA_INTEGRITY_ERROR`.
 
-1. `get(memoryId)` from `memories`; if absent throw `NOT_FOUND` without writes.
-2. `getAll(memoryId)` from `currentFacts.index('memoryId')`; require exactly one current textual projection.
-3. Compare `current.factId` to `expectedCurrentFactId`; mismatch throws `STALE_CORRECTION` before IDs/writes.
-4. Validate the request with `correctMemoryRequestSchema` and invoke `createTextCorrectionRecord` with persisted current as `previous`.
-5. `add` new Evidence, Fact, and LedgerEvent.
-6. Delete old `CurrentFact` by the old `factId` and `add` the new projection.
-7. Await transaction completion before returning success.
+- [ ] **Step 6: Implement provenance-validating `history`**
 
-Map `CorrectionDomainError` exactly:
+Read Memory, current projection, all Facts, Evidence, and LedgerEvents for the target memory. Fail safely unless:
 
-```ts
-switch (error.code) {
-  case 'NO_CHANGE':
-    throw new MemoryRepositoryError('NO_CHANGE');
-  case 'BROKEN_HISTORY':
-    throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
-  case 'EMPTY_CORRECTION':
-  case 'TEXT_TOO_LONG':
-  case 'REASON_TOO_LONG':
-    throw new MemoryRepositoryError('VALIDATION_FAILED');
-}
-```
+- exactly one current textual projection exists;
+- each Fact/Evidence/Event belongs to the requested memory;
+- Fact/Evidence kinds and contents agree;
+- missing persisted root predecessor maps to domain `null`;
+- `orderTextFactHistory` yields one complete root→tip chain ending at current fact;
+- exactly one `MEMORY_CREATED` event maps the root;
+- exactly one `MEMORY_CORRECTED` event maps every correction Fact and its evidence/predecessor.
 
-Do not auto-retry an aborted mutation.
+Serialize Dates to ISO strings only when returning the existing response contract.
 
-- [ ] **Step 5: Implement provenance-validating `history`**
+- [ ] **Step 7: Prove complete v1→v2 migration remains writable**
 
-Read target Memory, current projection, all Facts/Evidence/Events for that memory. Enforce before rendering:
-
-```text
-exactly one current textual fact
-all facts belong to memory
-all referenced evidence belongs to memory
-fact.kind = autobiographical_statement
-evidence.kind = text
-fact.content = evidence.content
-root fact has no persisted predecessor key
-orderTextFactHistory returns one complete root→tip chain ending at current fact
-exactly one MEMORY_CREATED event maps the root evidence
-exactly one MEMORY_CORRECTED event maps each correction fact
-event evidence/fact/predecessor links match the chain
-```
-
-Map missing persisted root `supersedesFactId` to `null`, then map ordered versions to the existing `MemoryHistoryResponse` ISO-string contract.
-
-- [ ] **Step 6: Extend the v1→v2 migration test through repository behavior**
-
-Seed a complete valid version-1 textual memory using the v1 schema, close it, instantiate the current repository (which upgrades to v2), then prove:
+In a separate test, seed a complete valid v1 Memory/Evidence/MEMORY_CREATED/Fact/CurrentFact record, close v1, instantiate the current repository so it upgrades to v2, then assert:
 
 ```ts
-expect((await repository.query('sintética')).status).toBe('FOUND');
+expect((await repository.query('migrada')).status).toBe('FOUND');
 expect((await repository.history('m-v1')).versions).toHaveLength(1);
 await expect(repository.correct('m-v1', {
   text: 'Memória sintética migrada e corrigida.',
@@ -765,7 +615,7 @@ await expect(repository.correct('m-v1', {
 })).resolves.toMatchObject({ memoryId: 'm-v1' });
 ```
 
-- [ ] **Step 7: Run repository, domain, contract, and full regression tests**
+- [ ] **Step 8: Verify repository + cumulative tests**
 
 ```bash
 pnpm --filter @mdp/web test -- src/lib/indexeddb/mdp-local-db.test.ts src/lib/indexeddb/indexeddb-memory-repository.test.ts
@@ -775,9 +625,7 @@ pnpm lint
 pnpm format:check
 ```
 
-Expected: all PASS; existing API/PostgreSQL tests are unchanged.
-
-- [ ] **Step 8: Commit Task 4**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add apps/web/src/lib/indexeddb/indexeddb-memory-repository.ts apps/web/src/lib/indexeddb/indexeddb-memory-repository.test.ts
@@ -786,30 +634,23 @@ git commit -m "feat(slice03): correct and reconstruct local memory history"
 
 ---
 
-### Task 5: React local-first composition, connectivity, fail-safe UX, and UUID-hiding regression
+### Task 5: Switch React memory flows to local repository
 
 **Files:**
 - Create: `apps/web/src/lib/use-connectivity.ts`
 - Create: `apps/web/src/lib/use-connectivity.test.tsx`
-- Modify: `apps/web/src/App.tsx:1-end`
-- Modify: `apps/web/src/App.test.tsx:1-end`
-- Modify: `apps/web/src/main.tsx:1-end`
-- Modify: `apps/web/src/features/memory/StoreMemoryForm.tsx:1-end`
-- Modify: `apps/web/src/features/memory/StoreMemoryForm.test.tsx:1-end`
-- Modify: `apps/web/src/features/memory/QueryMemoryForm.tsx:1-end`
-- Modify: `apps/web/src/features/memory/QueryMemoryForm.test.tsx:1-end`
-- Modify: `apps/web/src/features/memory/MemoryFoundResult.tsx:1-end`
-- Modify: `apps/web/src/features/memory/MemoryFoundResult.test.tsx:1-end`
+- Modify: `apps/web/src/App.tsx`, `apps/web/src/App.test.tsx`, `apps/web/src/main.tsx`
+- Modify: `apps/web/src/features/memory/StoreMemoryForm.tsx` and test
+- Modify: `apps/web/src/features/memory/QueryMemoryForm.tsx` and test
+- Modify: `apps/web/src/features/memory/MemoryFoundResult.tsx` and test
 
 **Interfaces:**
 - Consumes: complete `MemoryRepository`, `MemoryRepositoryError`, `IndexedDbMemoryRepository`.
-- Produces: UI that is enabled by local repository readiness, not API readiness or connectivity.
+- Produces: local-first UI whose enablement depends on local repository readiness only.
 
-- [ ] **Step 1: Write RED tests for informational connectivity and local readiness**
+- [ ] **Step 1: Add failing App/connectivity tests**
 
-Create `use-connectivity.test.tsx` that renders a small probe hook component, dispatches `offline`/`online` events, and asserts status changes without persistence calls.
-
-Update `App.test.tsx` to use a fake repository:
+Use a typed fake repository:
 
 ```ts
 const repository: MemoryRepository = {
@@ -819,28 +660,27 @@ const repository: MemoryRepository = {
   correct: vi.fn(),
   history: vi.fn(),
 };
+```
 
-render(<App repository={repository} />);
+Assert after render:
+
+```ts
 expect(await screen.findByText('Armazenamento local pronto')).toBeInTheDocument();
 expect(screen.getByRole('button', { name: 'Guardar' })).toBeEnabled();
 expect(screen.getByRole('button', { name: 'Consultar' })).toBeEnabled();
 ```
 
-Add a test where `repository.ready()` rejects with `LOCAL_STORAGE_UNAVAILABLE`; assert memory controls are disabled and a safe local-storage error is visible.
+Dispatch browser `offline`; assert visible `Offline` and both buttons remain enabled. In a second test make `ready()` reject with `LOCAL_STORAGE_UNAVAILABLE`; assert a safe storage alert and both controls disabled.
 
-Add a test that dispatches `offline`; assert visible `Offline` while controls stay enabled if repository readiness succeeded.
+Create a hook test that dispatches `online`/`offline` events and verifies `useConnectivity()` transitions.
 
-- [ ] **Step 2: Run focused UI tests and confirm RED**
+- [ ] **Step 2: Verify RED**
 
 ```bash
 pnpm --filter @mdp/web test -- src/App.test.tsx src/lib/use-connectivity.test.tsx
 ```
 
-Expected: FAIL because App still gates on API readiness and the hook does not exist.
-
 - [ ] **Step 3: Implement `useConnectivity`**
-
-Create:
 
 ```ts
 import { useEffect, useState } from 'react';
@@ -849,7 +689,6 @@ export function useConnectivity(): 'online' | 'offline' {
   const [status, setStatus] = useState<'online' | 'offline'>(() =>
     navigator.onLine ? 'online' : 'offline',
   );
-
   useEffect(() => {
     const online = () => setStatus('online');
     const offline = () => setStatus('offline');
@@ -860,42 +699,20 @@ export function useConnectivity(): 'online' | 'offline' {
       window.removeEventListener('offline', offline);
     };
   }, []);
-
   return status;
 }
 ```
 
-- [ ] **Step 4: Refactor App from API readiness to local repository readiness**
+- [ ] **Step 4: Refactor App and main composition**
 
-Change `App` signature to:
+`App` becomes `App({ repository }: { repository: MemoryRepository })`. Its effect calls `repository.ready()` and tracks `checking | ready | unavailable`. The form `enabled` value is `localStatus === 'ready'`; connectivity is a separate `Online`/`Offline` indicator.
 
-```ts
-export function App({ repository }: { repository: MemoryRepository })
-```
+Keep the synthetic-only laboratory warning unchanged.
 
-Track `checking | ready | unavailable`. In an effect, call `repository.ready()`. Render both states separately:
-
-```text
-Online / Offline                 ← informational
-Verificando armazenamento local…
-Armazenamento local pronto
-or
-Armazenamento local indisponível ← actual persistence gate
-```
-
-`enabled` is `localStatus === 'ready'` only. Do not call `getApiReadiness` from `App`.
-
-Keep the full synthetic-only laboratory warning unchanged.
-
-- [ ] **Step 5: Inject one local repository from `main.tsx`**
-
-Replace API composition with:
+`main.tsx` no longer calls web API env/readiness for product enablement:
 
 ```ts
-import { IndexedDbMemoryRepository } from './lib/indexeddb/indexeddb-memory-repository.js';
-
 const repository = new IndexedDbMemoryRepository();
-
 createRoot(root).render(
   <StrictMode>
     <App repository={repository} />
@@ -903,25 +720,23 @@ createRoot(root).render(
 );
 ```
 
-Do not delete `memory-api.ts`; existing API tests and later synchronization still need that HTTP client boundary.
+Do not delete the API client/config modules; they remain regression/future sync infrastructure.
 
-- [ ] **Step 6: Refactor StoreMemoryForm and QueryMemoryForm to repository methods**
+- [ ] **Step 5: Refactor StoreMemoryForm and QueryMemoryForm**
 
-`StoreMemoryForm` props become `{ repository, enabled }`; replace `createMemory(apiBaseUrl, text)` with `repository.create(text)`.
+Both receive `{ repository, enabled }`. Replace HTTP calls with `repository.create(text)` and `repository.query(normalized)`.
 
-On `LOCAL_STORAGE_UNAVAILABLE`, show:
+Failed create keeps unsaved text in component state. `LOCAL_STORAGE_UNAVAILABLE` copy:
 
 ```text
 O armazenamento local está indisponível. A lembrança não foi guardada.
 ```
 
-Do not clear the textarea after any failed mutation. Only clear after fulfilled repository `create`.
+Only successful completed create clears the field and shows `Lembrança guardada.`
 
-`QueryMemoryForm` props become `{ repository, enabled }`; replace API query with `repository.query(normalized)` and pass the same repository to `MemoryFoundResult`.
+- [ ] **Step 6: Refactor MemoryFoundResult and hide technical UUIDs**
 
-- [ ] **Step 7: Refactor MemoryFoundResult to local repository and remove technical UUID presentation**
-
-Props become:
+Props:
 
 ```ts
 interface MemoryFoundResultProps {
@@ -931,9 +746,9 @@ interface MemoryFoundResultProps {
 }
 ```
 
-Replace `correctMemory/getMemoryHistory/MemoryApiError` with repository methods and `MemoryRepositoryError` code checks. Preserve the existing `internallyPublishedFactId` behavior that keeps `Correção salva` visible after the component publishes its own new fact.
+Use `repository.correct()` and `repository.history()`. Preserve `internallyPublishedFactId` so the component's own successful correction does not immediately clear `Correção salva.`
 
-Required safe messages:
+Error copy:
 
 ```text
 STALE_CORRECTION → A lembrança mudou desde esta consulta. Consulte novamente antes de corrigir.
@@ -943,35 +758,19 @@ LOCAL_STORAGE_UNAVAILABLE → O armazenamento local está indisponível. A corre
 LOCAL_DATA_INTEGRITY_ERROR → O histórico local não pôde ser verificado com segurança.
 ```
 
-Remove this current raw-ID output entirely:
+Delete the current history line that renders `Evidência: {version.evidenceId} · Evento: {version.eventId}`. No replacement may render `memoryId`, `evidenceId`, `eventId`, `factId`, or predecessor IDs.
 
-```tsx
-<p className="provenance">
-  Evidência: {version.evidenceId} · Evento: {version.eventId}
-</p>
-```
+- [ ] **Step 7: Rewrite feature tests around repository fakes**
 
-Do not replace it with any other UUID. Keep human-level labels such as Original/Correção/Atual and optional reason.
-
-- [ ] **Step 8: Rewrite component tests around a typed fake repository**
-
-Stop mocking `memory-api.ts` in memory feature tests. Provide `vi.fn()` repository methods and assert exact calls such as:
-
-```ts
-expect(repository.correct).toHaveBeenCalledWith('memory-1', {
-  text: 'Minha irmã se chama Beatriz.',
-  expectedCurrentFactId: 'fact-1',
-  reason: 'Correção factual',
-});
-```
-
-Add a regression assertion after opening history:
+Stop mocking `memory-api.ts`. Assert exact repository calls. Add a history regression:
 
 ```ts
 expect(screen.queryByText(/evidence-1|event-1|fact-1/)).not.toBeInTheDocument();
 ```
 
-- [ ] **Step 9: Run focused UI + full test suite**
+Add storage-failure tests proving neither `Lembrança guardada.` nor `Correção salva.` appears after rejected persistence.
+
+- [ ] **Step 8: Verify GREEN**
 
 ```bash
 pnpm --filter @mdp/web test
@@ -981,140 +780,90 @@ pnpm lint
 pnpm format:check
 ```
 
-Expected: all PASS; API readiness can be unavailable without disabling healthy local memory UI.
-
-- [ ] **Step 10: Commit Task 5**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add apps/web/src apps/web/src/main.tsx
+git add apps/web/src
 git commit -m "feat(slice03): switch PWA memory flows to local repository"
 ```
 
 ---
 
-### Task 6: Installable PWA app shell and controlled Service Worker updates
+### Task 6: Add installable app shell and controlled Service Worker updates
 
 **Files:**
-- Modify: `apps/web/package.json`
-- Modify: `pnpm-lock.yaml`
-- Modify: `apps/web/vite.config.ts`
-- Modify: `apps/web/tsconfig.app.json`
-- Modify: `apps/web/index.html`
-- Create: `apps/web/public/logo.svg`
-- Create generated static icon files under `apps/web/public/`
-- Create: `apps/web/src/features/pwa/PwaUpdateNotice.tsx`
-- Create: `apps/web/src/features/pwa/PwaUpdateNotice.test.tsx`
-- Modify: `apps/web/src/App.tsx`
-- Modify: `apps/web/src/index.css`
+- Modify: `apps/web/package.json`, `pnpm-lock.yaml`, `apps/web/vite.config.ts`, `apps/web/tsconfig.app.json`, `apps/web/index.html`, `apps/web/src/App.tsx`, `apps/web/src/index.css`
+- Create: `apps/web/public/logo.svg` plus standard generated PWA raster assets
+- Create: `apps/web/src/features/pwa/PwaUpdateNotice.tsx` and test
 - Create: `scripts/verify-slice03-pwa.mjs`
 - Modify: root `package.json`
 
 **Interfaces:**
-- Consumes: Task 5 App shell.
-- Produces: installable manifest, generated Workbox Service Worker with prompt behavior, `PwaUpdateNotice`, and deterministic build verifier.
+- Produces: Web App Manifest, Workbox-generated `sw.js`, `PwaUpdateNotice`, `pnpm verify:pwa`.
 
-- [ ] **Step 1: Add vite-plugin-pwa and generate reproducible static PWA assets from one SVG source**
+- [ ] **Step 1: Add vite-plugin-pwa and static installability assets**
 
-Add `vite-plugin-pwa` as an `apps/web` dev dependency and run `pnpm install`.
+Add `vite-plugin-pwa` under web devDependencies and run `pnpm install`.
 
-Create a simple square non-sensitive `apps/web/public/logo.svg` containing only an `MDP` monogram/geometric mark; it must not use a photo or personal data.
-
-Generate standard static assets from that source with the official minimal-2023 generator in a one-time development command:
+Create one non-sensitive square `apps/web/public/logo.svg`. Generate committed standard raster assets using the official CLI:
 
 ```bash
 pnpm dlx @vite-pwa/assets-generator --preset minimal-2023 --root apps/web public/logo.svg
 ```
 
-Commit the generated `pwa-64x64.png`, `pwa-192x192.png`, `pwa-512x512.png`, `maskable-icon-512x512.png`, `apple-touch-icon-180x180.png`, and `favicon.ico`; the production build must not need the generator.
+Keep generated `pwa-64x64.png`, `pwa-192x192.png`, `pwa-512x512.png`, `maskable-icon-512x512.png`, `apple-touch-icon-180x180.png`, `favicon.ico`. The production build does not run the generator.
 
-- [ ] **Step 2: Write RED update-notice component test**
+- [ ] **Step 2: Write failing update-notice test**
 
-Mock `virtual:pwa-register/react` and assert a waiting worker does not update until the user acts:
+Mock `virtual:pwa-register/react` so `needRefresh` is `true`; render `PwaUpdateNotice`; assert `updateServiceWorker` is untouched before user action; click `Atualizar`; assert `updateServiceWorker(true)` exactly once. A `Depois` action only hides the notice.
 
-```ts
-vi.mock('virtual:pwa-register/react', () => ({
-  useRegisterSW: () => ({
-    needRefresh: [true, vi.fn()],
-    offlineReady: [false, vi.fn()],
-    updateServiceWorker: updateServiceWorkerMock,
-  }),
-}));
-
-render(<PwaUpdateNotice />);
-expect(screen.getByText('Nova versão disponível')).toBeInTheDocument();
-expect(updateServiceWorkerMock).not.toHaveBeenCalled();
-await user.click(screen.getByRole('button', { name: 'Atualizar' }));
-expect(updateServiceWorkerMock).toHaveBeenCalledWith(true);
-```
-
-- [ ] **Step 3: Run focused test and confirm RED**
+- [ ] **Step 3: Verify RED**
 
 ```bash
 pnpm --filter @mdp/web test -- src/features/pwa/PwaUpdateNotice.test.tsx
 ```
 
-Expected: FAIL because the PWA virtual module/configuration/component is absent.
+- [ ] **Step 4: Configure VitePWA with no runtime API cache**
 
-- [ ] **Step 4: Configure VitePWA for app-shell-only precache and prompt updates**
-
-Modify `apps/web/vite.config.ts`:
+Add `VitePWA` to `apps/web/vite.config.ts`:
 
 ```ts
-import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
-import { defineConfig } from 'vitest/config';
-
-export default defineConfig({
-  plugins: [
-    react(),
-    VitePWA({
-      registerType: 'prompt',
-      strategies: 'generateSW',
-      injectRegister: 'auto',
-      manifest: {
-        id: '/',
-        name: 'Memória Digital Pessoal',
-        short_name: 'MDP',
-        description: 'Memória textual local em ambiente de laboratório.',
-        start_url: '/',
-        scope: '/',
-        display: 'standalone',
-        theme_color: '#ffffff',
-        background_color: '#ffffff',
-        icons: [
-          { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          { src: '/maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        ],
-      },
-      workbox: {
-        globPatterns: ['**/*.{html,js,css,png,svg,ico}'],
-        navigateFallback: 'index.html',
-        runtimeCaching: [],
-        cleanupOutdatedCaches: true,
-        skipWaiting: false,
-        clientsClaim: false,
-      },
-    }),
-  ],
-  server: { port: 5173, strictPort: true },
-  preview: { port: 5173, strictPort: true, host: '127.0.0.1' },
-  test: {
-    name: 'web',
-    environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+VitePWA({
+  registerType: 'prompt',
+  strategies: 'generateSW',
+  injectRegister: 'auto',
+  manifest: {
+    id: '/',
+    name: 'Memória Digital Pessoal',
+    short_name: 'MDP',
+    description: 'Memória textual local em ambiente de laboratório.',
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    theme_color: '#ffffff',
+    background_color: '#ffffff',
+    icons: [
+      { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+      { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
   },
-});
+  workbox: {
+    globPatterns: ['**/*.{html,js,css,png,svg,ico}'],
+    navigateFallback: 'index.html',
+    runtimeCaching: [],
+    cleanupOutdatedCaches: true,
+    skipWaiting: false,
+    clientsClaim: false,
+  },
+})
 ```
 
-The explicit empty `runtimeCaching` array is part of the Slice 03 cache boundary.
+- [ ] **Step 5: Add virtual-module types, metadata, and update UI**
 
-- [ ] **Step 5: Add PWA React types, metadata, and update notice**
+Add `vite-plugin-pwa/react` to web TS `compilerOptions.types`.
 
-Add `"vite-plugin-pwa/react"` to `compilerOptions.types` in `apps/web/tsconfig.app.json`.
-
-Add to `apps/web/index.html` head:
+Add to HTML head:
 
 ```html
 <meta name="theme-color" content="#ffffff" />
@@ -1123,25 +872,18 @@ Add to `apps/web/index.html` head:
 <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
 ```
 
-Implement `PwaUpdateNotice` with `useRegisterSW`; render nothing unless `needRefresh` is true, and only call `updateServiceWorker(true)` after explicit `Atualizar` click. Include a `Depois` button that only clears the local prompt state.
+`PwaUpdateNotice` uses `useRegisterSW`. Render it in `App` outside memory forms. A waiting update is informational until explicit `Atualizar`.
 
-Render `<PwaUpdateNotice />` in `App` outside the memory forms so it cannot interrupt transaction logic.
+- [ ] **Step 6: Add build verifier**
 
-- [ ] **Step 6: Add built-artifact verification**
+Create `scripts/verify-slice03-pwa.mjs` using Node `fs/promises`. Fail unless:
 
-Create `scripts/verify-slice03-pwa.mjs` using Node `fs/promises`. It must fail unless all are true:
-
-```text
-apps/web/dist/manifest.webmanifest exists
-manifest id/start_url/scope are '/'
-manifest display is 'standalone'
-manifest contains 192x192 and 512x512 PNG icons
-apps/web/dist/sw.js exists
-apps/web/dist/index.html references manifest registration output
-sw.js does not contain http://127.0.0.1:3000
-sw.js does not contain an explicit /memories runtime route
-all manifest icon files exist in dist
-```
+- `apps/web/dist/manifest.webmanifest` exists;
+- manifest `id/start_url/scope` are `/` and `display` is `standalone`;
+- 192×192 and 512×512 PNG manifest icons exist in `dist`;
+- `apps/web/dist/sw.js` exists;
+- built `index.html` links the manifest/registration output;
+- `sw.js` does not contain the API base URL or an explicit `/memories` runtime route.
 
 Add root script:
 
@@ -1149,7 +891,7 @@ Add root script:
 "verify:pwa": "node scripts/verify-slice03-pwa.mjs"
 ```
 
-- [ ] **Step 7: Run component/build/artifact checks**
+- [ ] **Step 7: Verify GREEN**
 
 ```bash
 pnpm --filter @mdp/web test -- src/features/pwa/PwaUpdateNotice.test.tsx
@@ -1160,9 +902,7 @@ pnpm lint
 pnpm format:check
 ```
 
-Expected: all PASS. Inspect `apps/web/dist/sw.js` only as a build artifact; never commit `dist`.
-
-- [ ] **Step 8: Commit Task 6**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add apps/web/package.json pnpm-lock.yaml apps/web/vite.config.ts apps/web/tsconfig.app.json apps/web/index.html apps/web/public apps/web/src/features/pwa apps/web/src/App.tsx apps/web/src/index.css scripts/verify-slice03-pwa.mjs package.json
@@ -1171,7 +911,7 @@ git commit -m "feat(slice03): make web app installable offline"
 
 ---
 
-### Task 7: Real-browser offline, migration, failure, multi-tab, and Service Worker update acceptance
+### Task 7: Prove the complete boundary in real Chromium
 
 **Files:**
 - Create: `playwright.offline.config.ts`
@@ -1179,45 +919,25 @@ git commit -m "feat(slice03): make web app installable offline"
 - Modify: root `package.json`
 
 **Interfaces:**
-- Consumes: production `apps/web/dist`, IndexedDB v2, generated Service Worker.
-- Produces: `pnpm e2e:offline`, an isolated Chromium acceptance suite that starts only web preview; no NestJS/API process is available.
+- Produces: `pnpm e2e:offline`, one-worker web-only acceptance suite with no API process.
 
 - [ ] **Step 1: Create isolated offline Playwright config**
 
-Create `playwright.offline.config.ts`:
+Use `testMatch: 'local-offline.spec.ts'`, `workers: 1`, base URL `http://127.0.0.1:5173`, Chromium Desktop Chrome, and webServer command:
 
-```ts
-import { defineConfig, devices } from '@playwright/test';
-
-export default defineConfig({
-  testDir: './tests/e2e',
-  testMatch: 'local-offline.spec.ts',
-  workers: 1,
-  use: {
-    baseURL: 'http://127.0.0.1:5173',
-    trace: 'retain-on-failure',
-    ...devices['Desktop Chrome'],
-  },
-  webServer: {
-    command: 'pnpm --filter @mdp/web preview',
-    url: 'http://127.0.0.1:5173',
-    reuseExistingServer: false,
-    timeout: 120000,
-  },
-});
+```bash
+pnpm --filter @mdp/web preview
 ```
 
-Add root script:
+Do not start NestJS/API. Add:
 
 ```json
 "e2e:offline": "playwright test --config playwright.offline.config.ts"
 ```
 
-Do not start the API in this config; absence of the API is part of acceptance.
+- [ ] **Step 2: Write failing online-install → offline-reopen full flow**
 
-- [ ] **Step 2: Write RED full offline reopen flow**
-
-In `local-offline.spec.ts`, wait for the Service Worker before going offline:
+Flow:
 
 ```ts
 await page.goto('/');
@@ -1225,7 +945,6 @@ await page.evaluate(() => navigator.serviceWorker.ready);
 await page.getByLabel('Lembrança').fill('Minha irmã se chama Ana.');
 await page.getByRole('button', { name: 'Guardar' }).click();
 await expect(page.getByText('Lembrança guardada.')).toBeVisible();
-
 await page.close();
 await context.setOffline(true);
 const offlinePage = await context.newPage();
@@ -1233,62 +952,39 @@ await offlinePage.goto('/');
 await expect(offlinePage.getByText('Offline')).toBeVisible();
 ```
 
-Continue on the same offline page:
+Then while still offline: query Ana → FOUND; correct to Beatriz; query Ana → UNKNOWN; query Beatriz → FOUND; view two-version history; restore original text as new correction; verify three versions; reload offline; query restored Ana and verify three-version history persists.
 
-```text
-query Ana → FOUND
-correct Ana → Beatriz
-query Ana → UNKNOWN
-query Beatriz → FOUND
-open history → original + correction
-restore Ana as new correction
-history → exactly 3 versions
-reload while offline
-query Ana → restored FOUND
-history still 3 versions
-```
+Capture page requests and assert no request URL targets port `3000` during the memory flow.
 
-Record page requests before the flow and assert no request URL uses port `3000`.
+- [ ] **Step 3: Write failing two-tab stale acceptance**
 
-- [ ] **Step 3: Write RED multi-tab stale-write acceptance**
+Two pages query the same current fact before either correction. Submit correction in page A, then page B. Page B must show the stale message and current query must still resolve to page A's committed text.
 
-With one context and two pages, query the same current memory in both, open both correction forms, submit page A first, then page B. Assert page B shows the stale message and does not silently replace page A's content.
+- [ ] **Step 4: Write failing local-storage-unavailable acceptance**
 
-- [ ] **Step 4: Write RED browser local-storage failure acceptance**
+In a fresh context, install an init script that replaces `window.indexedDB` with a synthetic factory whose `open()` throws `DOMException('synthetic unavailable', 'InvalidStateError')`. Navigate to `/`. Assert storage unavailable message, disabled Guardar/Consultar, no success message, and no request to port 3000.
 
-Create a fresh context with init script replacing `window.indexedDB` with an object whose `open()` throws a safe synthetic `DOMException`. Navigate to `/` and assert:
+- [ ] **Step 5: Write failing real-browser v1→v2 migration acceptance**
 
-```text
-Armazenamento local indisponível is visible
-Guardar is disabled
-Consultar is disabled
-no Memória/Lembrança salva success message appears
-no fallback request to port 3000 occurs
-```
+Before loading app JS, route `/` once to minimal same-origin HTML. In `page.evaluate`, create `mdp-local` version 1 and seed complete valid Memory/Evidence/MEMORY_CREATED/Fact/CurrentFact records. Remove the route and load the real app. Query seeded content, open one-version history, then correct successfully. Assert the database version observed in-browser is 2 and there are still exactly five product stores.
 
-- [ ] **Step 5: Write RED real-browser v1→v2 migration acceptance**
+- [ ] **Step 6: Write changed-Service-Worker waiting/activation preservation acceptance**
 
-Before loading application JavaScript, temporarily fulfill `/` with minimal same-origin HTML, then use `page.evaluate` to open `mdp-local` version 1 and seed one complete valid Memory/Evidence/MEMORY_CREATED/Fact/CurrentFact record. Remove the route and navigate to the real app. Assert the production v2 code upgrades the database, query finds the seeded current text, history shows one version, and a correction commits successfully.
+This one-worker suite may mutate the built `dist/sw.js` temporarily. In `try/finally`:
 
-Do not create any sixth product store for migration metadata.
+1. save original `dist/sw.js` bytes;
+2. create/query one local memory and capture `navigator.serviceWorker.controller`;
+3. append a harmless revision comment to `dist/sw.js`;
+4. call `registration.update()`;
+5. wait until `registration.waiting` exists;
+6. assert current controller has not changed while the new worker is waiting;
+7. send `registration.waiting.postMessage({ type: 'SKIP_WAITING' })`;
+8. wait for `controllerchange`, reload, then query/history the same local memory;
+9. restore original `sw.js` bytes in `finally`.
 
-- [ ] **Step 6: Write real waiting-Service-Worker update preservation acceptance**
+This proves a changed generated worker waits and can be explicitly activated without deleting IndexedDB.
 
-Because this suite owns one worker and the preview serves the already-built `dist`, use Node `fs/promises` from the Playwright test to:
-
-1. read and save original `apps/web/dist/sw.js` bytes;
-2. seed/query one local memory and wait for current registration;
-3. append one harmless build-revision comment to `dist/sw.js`;
-4. call `registration.update()` in the page;
-5. wait for the application's `Nova versão disponível` prompt;
-6. click `Atualizar`;
-7. wait for reload/controller change;
-8. query the seeded memory again and verify history remains intact;
-9. restore the original `sw.js` in a `finally` block even on failure.
-
-This proves a changed worker can activate/reload without deleting `mdp-local`. The test must never mutate committed source files.
-
-- [ ] **Step 7: Build once, run the offline suite, and confirm GREEN**
+- [ ] **Step 7: Verify offline suite GREEN**
 
 ```bash
 pnpm build
@@ -1297,19 +993,15 @@ pnpm exec playwright install chromium
 pnpm e2e:offline
 ```
 
-Expected: all Slice 03 offline acceptance cases PASS with only Vite preview running.
-
 - [ ] **Step 8: Run existing browser regression separately**
 
-Start PostgreSQL as required by the existing suite, then:
+With PostgreSQL available as required by the existing suite:
 
 ```bash
 pnpm e2e
 ```
 
-Expected: Foundation + Slice 01 + Slice 02 existing E2E remain PASS.
-
-- [ ] **Step 9: Commit Task 7**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add playwright.offline.config.ts tests/e2e/local-offline.spec.ts package.json
@@ -1318,31 +1010,19 @@ git commit -m "test(slice03): prove local PWA offline in chromium"
 
 ---
 
-### Task 8: Architecture guards, CI progression, evidence, review, and gate preparation
+### Task 8: Add architecture guards, CI, evidence, review, and gate
 
 **Files:**
 - Create: `tests/architecture/slice-03-scope.test.ts`
 - Modify: `.github/workflows/ci.yml`
-- Create after technical green: `docs/evidence/slice-03/SLICE-03-EVIDENCE-001.md`
-- Create after technical green: `docs/checkpoints/MDP-SLICE-03-CHECKPOINT-001.md`
-- Create after technical green: `docs/phases/SLICE-03.md`
-- Create after technical green: `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/README.md`
-- Create after technical green: `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-PLAN.md`
-- Create after technical green: `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-DECISIONS.md`
-- Create after technical green: `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-CHECKPOINT.yaml`
-- Create after technical green: `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-REPORT.md`
-- Create after technical green: `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-VALIDATION.txt`
-- Create after technical green: `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-VALIDATION-FULL.txt`
-- Create after technical green: `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-SMOKE.txt`
-- Create after technical green: `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-ARTIFACT-MANIFEST.sha256`
+- After technical GREEN, create Slice 03 evidence/checkpoint/phase and `artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/` PRF files.
 
 **Interfaces:**
-- Consumes: all prior tasks and existing CI.
-- Produces: cumulative executable guardrails, PRF/evidence, review checkpoint, and a gate-ready exact HEAD; does not merge without authority.
+- Produces: executable boundary guards and gate-ready evidence tied to exact SHA/CI.
 
-- [ ] **Step 1: Write RED architecture boundary test**
+- [ ] **Step 1: Write failing architecture test**
 
-Create `tests/architecture/slice-03-scope.test.ts` that reads repository source files and asserts:
+Read all `packages/domain/src` files and reject:
 
 ```ts
 const forbiddenDomainPatterns = [
@@ -1356,49 +1036,35 @@ const forbiddenDomainPatterns = [
 ];
 ```
 
-Every file under `packages/domain/src` must match none of those patterns.
+Read active memory feature files and assert they do not import `memory-api`, do not call `fetch`, and do not render technical Evidence/Event IDs. Assert local DB source contains name `mdp-local`, version `2`, and exactly the five approved store names.
 
-Also assert active memory UI files under `apps/web/src/features/memory` do not import `memory-api`, do not call `fetch`, and do not render the literal labels `Evidência:` or `Evento:` followed by technical IDs.
-
-Assert the local database source contains exactly `mdp-local`, version `2`, and the five approved store names.
-
-- [ ] **Step 2: Run architecture test and confirm RED if any boundary remains**
+- [ ] **Step 2: Verify architecture guard**
 
 ```bash
-pnpm test -- --run tests/architecture/slice-03-scope.test.ts
+pnpm exec vitest run tests/architecture/slice-03-scope.test.ts
 ```
 
-Expected before all cleanup: fail on any remaining HTTP coupling/raw-ID output; after fixes: PASS.
+Fix only Slice 03 boundary violations; do not refactor unrelated code.
 
-- [ ] **Step 3: Extend CI without removing any existing step**
+- [ ] **Step 3: Extend CI without removing existing checks**
 
-Keep every existing PostgreSQL/schema/typecheck/lint/format/manifest/test/build/runtime/Chromium/E2E/outage step. Add after `pnpm build`:
+Keep every current PostgreSQL/schema/typecheck/lint/format/PRF/test/build/runtime/Chromium/E2E/outage step. After build add:
 
 ```yaml
 - name: Verify Slice 03 PWA build
   run: pnpm verify:pwa
 ```
 
-After Chromium installation and existing `pnpm e2e`, add:
+After existing browser E2E add:
 
 ```yaml
 - name: Verify Slice 03 offline browser acceptance
   run: pnpm e2e:offline
 ```
 
-Do not weaken or replace the existing PostgreSQL outage proof.
+After final PRF creation add its SHA-256 manifest verification exactly like Slices 01–02.
 
-Once the Slice 03 PRF is finalized, add:
-
-```yaml
-- name: Verify Slice 03 PRF manifest
-  working-directory: artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE
-  run: sha256sum -c PHASE-03-ARTIFACT-MANIFEST.sha256
-```
-
-- [ ] **Step 4: Run the complete local verification sequence on the exact candidate HEAD**
-
-With PostgreSQL healthy where existing tests require it:
+- [ ] **Step 4: Run complete candidate verification**
 
 ```bash
 pnpm install --frozen-lockfile
@@ -1416,103 +1082,81 @@ pnpm e2e
 pnpm e2e:offline
 ```
 
-Then execute the existing real PostgreSQL outage verification exactly as CI does. Record command outputs and exact HEAD SHA.
+Also run the existing real PostgreSQL outage proof exactly as CI does. Record exact test counts, command outputs, candidate HEAD.
 
-- [ ] **Step 5: Create evidence and PRF from observed results only**
+- [ ] **Step 5: Build evidence/PRF only from observed results**
 
-`SLICE-03-EVIDENCE-001.md` and `PHASE-03-REPORT.md` must record exact observed counts/SHAs/run IDs, not predicted values. Evidence must include:
-
-```text
-candidate HEAD
-CI run/job IDs
-unit/integration/architecture test counts
-existing E2E count
-new offline E2E count
-IndexedDB v1→v2 migration PASS
-same-base multi-tab stale proof PASS
-local failure false-success proof PASS
-PWA manifest/SW build proof PASS
-API/PostgreSQL regression PASS
-real PostgreSQL outage proof PASS
-real sensitive data NOT AUTHORIZED
-pilot NOT AUTHORIZED
-Slice 04 NOT STARTED / NOT AUTHORIZED
-```
-
-Compute the SHA-256 manifest only after all PRF files are final; CI must verify it.
-
-- [ ] **Step 6: Run review against the exact candidate HEAD**
-
-Perform MESTRE technical review and applicable MCF review/audit steps against the exact SHA. Classify findings:
+Create:
 
 ```text
-BLOCKER → fix before gate
-REQUIRED_FOR_ACCEPTANCE → fix before gate
-FUTURE_OR_IMPROVEMENT → backlog with rationale
+docs/evidence/slice-03/SLICE-03-EVIDENCE-001.md
+docs/checkpoints/MDP-SLICE-03-CHECKPOINT-001.md
+docs/phases/SLICE-03.md
+artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/README.md
+artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-PLAN.md
+artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-DECISIONS.md
+artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-CHECKPOINT.yaml
+artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-REPORT.md
+artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-VALIDATION.txt
+artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-VALIDATION-FULL.txt
+artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-SMOKE.txt
+artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE/PHASE-03-ARTIFACT-MANIFEST.sha256
 ```
 
-After any product-code fix, rerun the full relevant verification and update evidence to the new exact HEAD. Never reuse a prior green CI run as proof for a changed HEAD.
+Evidence records actual final HEAD, CI run/job IDs, automated/E2E counts, migration proof, multi-tab stale proof, false-success failure proof, PWA/SW proof, API/PostgreSQL regression, outage proof, and continuing authorization boundaries. Compute manifest only after PRF content is frozen.
 
-- [ ] **Step 7: Obtain fresh CI on the final review-clean HEAD**
+- [ ] **Step 6: Review the exact candidate HEAD**
 
-Push the exact candidate and require CI SUCCESS for all cumulative and Slice 03 checks. Freeze final evidence/PRF to that HEAD and CI run.
+Run MESTRE technical review and applicable MCF review/audit against the exact SHA. Classify findings `BLOCKER`, `REQUIRED_FOR_ACCEPTANCE`, `FUTURE_OR_IMPROVEMENT`. Fix the first two before gate and rerun relevant/full verification on the new SHA.
 
-- [ ] **Step 8: Prepare the HUMAN_GATE without merging**
+- [ ] **Step 7: Require fresh CI on final review-clean HEAD**
 
-Present LEANDRO with:
+No prior green run is proof for a changed HEAD. Freeze final evidence only after fresh CI succeeds on the exact final candidate.
 
-```text
-exact final branch HEAD
-fresh CI run/job IDs
-all automated test counts
-all E2E counts
-PWA/offline/migration/concurrency/failure evidence
-open Critical/Important findings = 0
-applicable Emily/LÉO gate state exactly as actually executed, never inferred
-real sensitive data NOT AUTHORIZED
-pilot NOT AUTHORIZED
-Slice 04 NOT AUTHORIZED
-```
+- [ ] **Step 8: Prepare HUMAN_GATE; do not merge automatically**
 
-Merge only after explicit compatible authority. If an expected independent gate is unavailable, report `NOT PERFORMED / NOT CLAIMED`; do not simulate it.
+Present exact final branch HEAD, fresh CI run/job IDs, all test/E2E counts, PWA/offline/migration/concurrency/failure evidence, open Critical/Important findings, and the actual Emily/LÉO gate states. If a gate was unavailable, record `NOT PERFORMED / NOT CLAIMED`; never simulate it.
 
-- [ ] **Step 9: Commit final pre-gate evidence state**
+Real sensitive data remains `NOT AUTHORIZED`, pilot remains `NOT AUTHORIZED`, and Slice 04 remains `NOT STARTED / NOT AUTHORIZED` unless separately changed by LEANDRO.
+
+- [ ] **Step 9: Commit final pre-gate evidence and rerun CI**
 
 ```bash
 git add tests/architecture/slice-03-scope.test.ts .github/workflows/ci.yml docs/evidence/slice-03 docs/checkpoints/MDP-SLICE-03-CHECKPOINT-001.md docs/phases/SLICE-03.md artifacts/phases/SLICE-03-LOCAL-PWA-OFFLINE
 git commit -m "docs(slice03): freeze gate evidence"
 ```
 
-After this commit, run fresh CI again because evidence/manifest changes advance HEAD.
+Because this commit advances HEAD, run fresh CI again before requesting HUMAN_GATE.
 
 ---
 
-## Final Spec-to-Task Coverage
+## Spec Coverage Matrix
 
-| Approved requirement | Implemented/proved by |
+| Approved requirement | Task(s) |
 |---|---|
-| Full create/query/correct/history/restore offline flow | Tasks 3–5, browser proof Task 7 |
-| IndexedDB active source only | Tasks 1, 3–5, architecture guard Task 8 |
-| Five conceptual stores | Task 2 |
-| App shell only in Service Worker cache | Task 6 + Task 7 + build verifier |
-| Atomic local mutations | Tasks 3–4 |
-| Permanent client UUID v7 IDs | Tasks 3–4 via `@mdp/shared` |
-| Non-destructive DB upgrades | Task 2 + repository migration Task 4 + browser migration Task 7 |
-| Visible Offline state without disabling local flows | Task 5 + Task 7 |
-| No server import | Architecture/behavior Tasks 5, 7, 8 |
-| `expectedCurrentFactId` stale protection | Task 4 + multi-tab Task 7 |
-| Controlled Service Worker updates | Task 6 + real changed-worker proof Task 7 |
-| Fail-safe storage behavior | Tasks 3–5 + browser failure Task 7 |
-| Domain independent from IndexedDB/browser APIs | Task 8 |
-| Current-only deterministic query | Task 3 + offline flow Task 7 |
-| Explicit history/provenance integrity | Task 4 |
-| Restore append-only | Task 4 + Task 7 |
-| API readiness does not gate local memory | Task 5 + offline web-only server Task 7 |
-| Existing Slice 01–02 regression remains mandatory | Tasks 4, 5, 7, 8 |
-| Synthetic-only boundary | Task 5 UI regression + Task 8 evidence/gate |
+| Create/query/correct/history/restore offline | 3–5, 7 |
+| IndexedDB active source only | 1, 3–5, 8 |
+| Exactly five conceptual stores | 2, 7 |
+| App-shell-only SW caching | 6, 7 |
+| Atomic local mutation | 3–4 |
+| Client UUID v7 identity | 3–4 via existing `createId` |
+| Non-destructive v1→v2 migration | 2, 4, 7 |
+| Visible Offline without blocking local operations | 5, 7 |
+| No server import/dual-write/fallback | 5, 7, 8 |
+| Same-base stale protection | 4, 7 |
+| Controlled SW update | 6, 7 |
+| Fail-safe local storage | 3–5, 7 |
+| Domain browser-neutral | 8 |
+| Current-only deterministic query | 3, 7 |
+| History/provenance integrity | 4 |
+| Append-only restore | 4, 7 |
+| API readiness not a local gate | 5, 7 |
+| Technical UUIDs hidden in normal UI | 5, 8 |
+| Existing Slice 01–02 regression preserved | 4–5, 7–8 |
+| Synthetic-only safety boundary | 5, 8 |
 
-## Execution Boundary
+## Execution Handoff
 
-This plan is complete only as a planning artifact. Do not begin Task 1 until LEANDRO separately authorizes implementation.
+The plan is complete as a planning artifact. Implementation remains unauthorized until LEANDRO explicitly authorizes it.
 
-When implementation is authorized, first verify live `main`, invoke the required worktree skill, create the fresh Slice 03 implementation branch/worktree, and then execute tasks strictly in order with RED→GREEN evidence and review between task boundaries.
+After authorization, first verify live `main`, create the fresh worktree/branch, then execute tasks in order with RED→GREEN evidence and review at task boundaries. Recommended execution mode is Superpowers subagent-driven development when the runtime can actually dispatch independent task workers; otherwise use executing-plans inline and state that no independent subagents were claimed.
