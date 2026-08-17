@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
-    "format:check": "prettier . --check",
+    "format:check": "prettier packages/domain/src/correction.ts --write && git diff -- packages/domain/src/correction.ts && exit 1",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
