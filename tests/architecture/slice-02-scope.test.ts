@@ -10,7 +10,10 @@ async function dependencies(path: string): Promise<string[]> {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
-  return [...Object.keys(parsed.dependencies ?? {}), ...Object.keys(parsed.devDependencies ?? {})];
+  return [
+    ...Object.keys(parsed.dependencies ?? {}),
+    ...Object.keys(parsed.devDependencies ?? {}),
+  ];
 }
 
 describe('Slice 02 scope invariants', () => {
@@ -48,7 +51,9 @@ describe('Slice 02 scope invariants', () => {
       'packages/domain/package.json',
       'packages/shared/package.json',
     ];
-    const names = (await Promise.all(paths.map(dependencies))).flat().map((name) => name.toLowerCase());
+    const names = (await Promise.all(paths.map(dependencies)))
+      .flat()
+      .map((name) => name.toLowerCase());
 
     for (const forbidden of [
       'openai',
