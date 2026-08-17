@@ -210,7 +210,9 @@ test('local storage failure never reports a successful memory write', async ({ b
   await context.close();
 });
 
-test('browser upgrades seeded v1 data to v2 without loss and remains writable', async ({ page }) => {
+test('browser upgrades seeded v1 data to v2 without loss and remains writable', async ({
+  page,
+}) => {
   await page.route('**/assets/*.js', (route) => route.abort());
   await page.goto('/');
   await seedVersionOneDatabase(page);
@@ -226,8 +228,12 @@ test('browser upgrades seeded v1 data to v2 without loss and remains writable', 
     });
     const result = {
       version: db.version,
-      evidenceMemoryIndex: db.transaction('evidence').objectStore('evidence').indexNames.contains('memoryId'),
-      predecessorUnique: db.transaction('facts').objectStore('facts').index('supersedesFactId').unique,
+      evidenceMemoryIndex: db
+        .transaction('evidence')
+        .objectStore('evidence')
+        .indexNames.contains('memoryId'),
+      predecessorUnique: db.transaction('facts').objectStore('facts').index('supersedesFactId')
+        .unique,
     };
     db.close();
     return result;
