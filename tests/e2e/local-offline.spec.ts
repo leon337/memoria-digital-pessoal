@@ -148,7 +148,8 @@ test('reopens offline and completes create/query/correct/history/restore without
 
   await versions.nth(0).getByRole('button', { name: 'Usar este texto como nova correção' }).click();
   await offlinePage.getByRole('button', { name: 'Salvar correção' }).click();
-  await expect(offlinePage.getByText('Minha irmã se chama Ana.', { exact: true })).toBeVisible();
+  await expect(offlinePage.getByText('Correção salva.', { exact: true })).toBeVisible();
+  await expect(offlinePage.locator('p.recorded-memory')).toHaveText('Minha irmã se chama Ana.');
 
   await offlinePage.getByRole('button', { name: 'Ver histórico' }).click();
   versions = offlinePage
