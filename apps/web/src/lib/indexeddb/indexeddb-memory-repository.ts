@@ -257,7 +257,10 @@ export class IndexedDbMemoryRepository implements MemoryRepository {
       const done = transactionDone(transaction);
 
       const memoryRequest = transaction.objectStore('memories').get(memoryId);
-      const evidenceRequest = transaction.objectStore('evidence').index('memoryId').getAll(memoryId);
+      const evidenceRequest = transaction
+        .objectStore('evidence')
+        .index('memoryId')
+        .getAll(memoryId);
       const eventsRequest = transaction
         .objectStore('ledgerEvents')
         .index('memoryId')
@@ -290,7 +293,11 @@ export class IndexedDbMemoryRepository implements MemoryRepository {
       }
 
       const current = currentRows[0];
-      if (!current || current.memoryId !== memoryId || !datesEqual(current.recordedAt, memory.recordedAt)) {
+      if (
+        !current ||
+        current.memoryId !== memoryId ||
+        !datesEqual(current.recordedAt, memory.recordedAt)
+      ) {
         throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
       }
 
