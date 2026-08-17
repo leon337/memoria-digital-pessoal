@@ -17,8 +17,8 @@
 - Slice 01: `COMPLETE / MERGED / POST-MERGE VALIDATED`.
 - Slice 02 implementation: `COMPLETE`.
 - Slice 02 technical validation: `PASS`.
-- Authorized Slice 02 pre-governance product HEAD: `1344d19c104d078deaad05eca008282130ee0b38`.
-- Canonical pre-merge CI: `32001570247` / job `95302766045` — `PASS`.
+- Authorized Slice 02 branch HEAD: `25f134b78ffaf020b3523ef0ed1d7b1f32bcb707`.
+- Canonical authorization CI: `32002508418` / job `95305432626` — `PASS`.
 - Automated tests: `95/95` PASS.
 - Browser E2E: `3/3` PASS.
 - Physical correction schema checks: PASS.
@@ -46,4 +46,4 @@
 
 ## Next action
 
-Validate the governance-only authorization commit, promote and merge PR #4, validate `main`, then write the Slice 02 closeout state.
+Promote and merge PR #4 at the authorized HEAD, validate `main`, then write the Slice 02 closeout state.
