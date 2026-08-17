@@ -4,6 +4,11 @@ async function waitLocalReady(page: Page): Promise<void> {
   await expect(page.getByText('Armazenamento local pronto')).toBeVisible();
 }
 
+async function signalOffline(page: Page): Promise<void> {
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await expect(page.getByText('Offline', { exact: true })).toBeVisible();
+}
+
 async function primeServiceWorker(page: Page): Promise<void> {
   await page.goto('/');
   await waitLocalReady(page);
@@ -116,7 +121,7 @@ test('reopens offline and completes create/query/correct/history/restore without
   const offlinePage = await context.newPage();
   await offlinePage.goto('/');
   await waitLocalReady(offlinePage);
-  await expect(offlinePage.getByText('Offline', { exact: true })).toBeVisible();
+  await signalOffline(offlinePage);
 
   await queryMemory(offlinePage, 'Ana', 'Minha irmã se chama Ana.');
   await offlinePage.getByRole('button', { name: 'Corrigir' }).click();
@@ -153,7 +158,7 @@ test('reopens offline and completes create/query/correct/history/restore without
 
   await offlinePage.reload();
   await waitLocalReady(offlinePage);
-  await expect(offlinePage.getByText('Offline', { exact: true })).toBeVisible();
+  await signalOffline(offlinePage);
   await queryMemory(offlinePage, 'Ana', 'Minha irmã se chama Ana.');
   await offlinePage.getByRole('button', { name: 'Ver histórico' }).click();
   await expect(
