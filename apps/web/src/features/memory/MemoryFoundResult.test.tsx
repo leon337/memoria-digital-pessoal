@@ -1,17 +1,12 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  correctMemory,
-  getMemoryHistory,
-  MemoryApiError,
-} from '../../lib/memory-api.js';
+import { correctMemory, getMemoryHistory, MemoryApiError } from '../../lib/memory-api.js';
 import { MemoryFoundResult } from './MemoryFoundResult.js';
 
 vi.mock('../../lib/memory-api.js', async () => {
-  const actual = await vi.importActual<typeof import('../../lib/memory-api.js')>(
-    '../../lib/memory-api.js',
-  );
+  const actual =
+    await vi.importActual<typeof import('../../lib/memory-api.js')>('../../lib/memory-api.js');
   return {
     ...actual,
     correctMemory: vi.fn(),
@@ -100,9 +95,7 @@ describe('MemoryFoundResult', () => {
     const user = userEvent.setup();
     correctMemoryMock.mockRejectedValue(new MemoryApiError(409, 'STALE_CORRECTION'));
 
-    render(
-      <MemoryFoundResult apiBaseUrl="http://api" result={found} onCurrentChange={vi.fn()} />,
-    );
+    render(<MemoryFoundResult apiBaseUrl="http://api" result={found} onCurrentChange={vi.fn()} />);
 
     await user.click(screen.getByRole('button', { name: 'Corrigir' }));
     const text = screen.getByLabelText('Texto corrigido');
