@@ -24,11 +24,11 @@
 
 This authorization is limited to merging and formally closing Slice 02 after successful post-merge validation. It does not authorize real sensitive data, pilot, Slice 03, AI, voice, offline/sync, purge/deletion or unrelated infrastructure.
 
-## Final technical checkpoint before authorization
+## Final technical checkpoint before merge
 
 - PR: `#4 — SLICE 02: correction and history` — OPEN / PRE-MERGE.
-- Authorized branch HEAD before this governance-only checkpoint update: `1344d19c104d078deaad05eca008282130ee0b38`.
-- Canonical pre-merge CI: `32001570247` / job `95302766045` — PASS.
+- Authorized final branch HEAD: `e033288150cd94bfeecc0ef9d6e29400e0a0f211`.
+- Canonical authorization CI: `32002677832` / job `95305926016` — PASS.
 - Automated tests: `95/95` PASS across `25` files.
 - Browser E2E: `3/3` PASS.
 - Typecheck: PASS.
@@ -86,4 +86,4 @@ Final MESTRE review found that the accessible success confirmation could be clea
 
 ## Next action
 
-Run CI on this governance-only checkpoint commit, promote PR #4 from draft, merge the validated authorized HEAD, validate `main`, then record formal Slice 02 completion separately.
+Promote PR #4 from draft, merge the authorized final HEAD, validate `main`, then record formal Slice 02 completion separately.
