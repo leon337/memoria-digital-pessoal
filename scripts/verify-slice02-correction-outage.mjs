@@ -9,6 +9,7 @@ if (mode === 'prepare') {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ text: 'Registro sintético base para correção de indisponibilidade.' }),
+    signal: AbortSignal.timeout(15_000),
   });
   if (response.status !== 201) {
     throw new Error(`prepare expected 201, received ${response.status}`);
@@ -26,6 +27,7 @@ if (mode === 'prepare') {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ text: submittedText, expectedCurrentFactId: factId }),
+    signal: AbortSignal.timeout(15_000),
   });
   const raw = await response.text();
   if (response.status !== 503) {
