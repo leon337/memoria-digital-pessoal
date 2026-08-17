@@ -19,7 +19,9 @@
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "serve:e2e": "concurrently -k -n api,web \"pnpm --filter @mdp/api start\" \"pnpm --filter @mdp/web preview\"",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:offline": "playwright test --config playwright.offline.config.ts",
+    "verify:pwa": "pnpm --filter @mdp/web build && node scripts/verify-slice03-pwa.mjs"
   },
   "devDependencies": {
     "@eslint/js": "latest",
