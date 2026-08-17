@@ -71,5 +71,7 @@ it('requires a non-empty history', () => {
   expect(
     memoryHistoryResponseSchema.parse({ memoryId: 'm1', versions: [version] }).versions,
   ).toHaveLength(1);
-  expect(memoryHistoryResponseSchema.safeParse({ memoryId: 'm1', versions: [] }).success).toBe(false);
+  expect(memoryHistoryResponseSchema.safeParse({ memoryId: 'm1', versions: [] }).success).toBe(
+    false,
+  );
 });
