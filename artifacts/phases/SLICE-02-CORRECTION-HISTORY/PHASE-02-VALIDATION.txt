@@ -1,0 +1,36 @@
+SLICE 02 — Correction & History — Canonical Pre-Gate Validation
+Date: 2026-08-17
+Branch HEAD: 361214e97e9b70df7092ee1f6d5c3944446edda0
+CI run: 32000681041
+CI job: 95300284264
+Result: PASS
+
+Prisma schema validate: PASS
+Prisma generate: PASS
+Migration deploy: PASS
+Exact product tables: PASS
+Slice 02 physical correction schema: PASS
+Typecheck: PASS
+Lint: PASS
+Prettier format check: PASS
+Slice 01 PRF regression manifest: PASS
+Automated test files: 25 passed / 25
+Automated tests: 95 passed / 95
+Build: PASS
+Workspace runtime import: PASS
+Browser E2E: 3 passed / 3
+Real PostgreSQL outage proof: PASS
+
+Physical schema output:
+fact_lineage_column=1 fact_lineage_unique=1 ledger_columns=3 correction_check=1
+
+Outage output:
+slice02 correction outage=503 SERVICE_UNAVAILABLE safe-envelope
+healthy live=200 ready=200
+db-down live=200 ready=503 memory=503
+
+Boundary: synthetic laboratory data only.
+Merge: NOT AUTHORIZED / NOT PERFORMED.
+Real sensitive data: NOT AUTHORIZED.
+Pilot: NOT AUTHORIZED.
+Slice 03: NOT AUTHORIZED.
