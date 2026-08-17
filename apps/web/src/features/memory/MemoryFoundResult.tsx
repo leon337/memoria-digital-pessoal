@@ -5,10 +5,7 @@ import {
   type MemoryQueryResponse,
 } from '@mdp/contracts';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import {
-  MemoryRepositoryError,
-  type MemoryRepository,
-} from '../../lib/memory-repository.js';
+import { MemoryRepositoryError, type MemoryRepository } from '../../lib/memory-repository.js';
 
 type FoundResult = Extract<MemoryQueryResponse, { status: 'FOUND' }>;
 
@@ -18,11 +15,7 @@ interface MemoryFoundResultProps {
   onCurrentChange: (next: FoundResult) => void;
 }
 
-export function MemoryFoundResult({
-  repository,
-  result,
-  onCurrentChange,
-}: MemoryFoundResultProps) {
+export function MemoryFoundResult({ repository, result, onCurrentChange }: MemoryFoundResultProps) {
   const internallyPublishedFactId = useRef<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(result.answer);
@@ -150,10 +143,7 @@ export function MemoryFoundResult({
     try {
       setHistory(await repository.history(result.provenance.memoryId));
     } catch (error) {
-      if (
-        error instanceof MemoryRepositoryError &&
-        error.code === 'LOCAL_STORAGE_UNAVAILABLE'
-      ) {
+      if (error instanceof MemoryRepositoryError && error.code === 'LOCAL_STORAGE_UNAVAILABLE') {
         setHistoryError('Não foi possível carregar o histórico: armazenamento local indisponível.');
       } else if (
         error instanceof MemoryRepositoryError &&

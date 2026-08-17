@@ -1,9 +1,6 @@
 import { MEMORY_QUERY_MAX_LENGTH, type MemoryQueryResponse } from '@mdp/contracts';
 import { useState, type FormEvent } from 'react';
-import {
-  MemoryRepositoryError,
-  type MemoryRepository,
-} from '../../lib/memory-repository.js';
+import { MemoryRepositoryError, type MemoryRepository } from '../../lib/memory-repository.js';
 import { MemoryFoundResult } from './MemoryFoundResult.js';
 
 export function QueryMemoryForm({
@@ -32,10 +29,7 @@ export function QueryMemoryForm({
     try {
       setResult(await repository.query(normalized));
     } catch (caught) {
-      if (
-        caught instanceof MemoryRepositoryError &&
-        caught.code === 'LOCAL_STORAGE_UNAVAILABLE'
-      ) {
+      if (caught instanceof MemoryRepositoryError && caught.code === 'LOCAL_STORAGE_UNAVAILABLE') {
         setError('Não foi possível consultar porque o armazenamento local está indisponível.');
       } else if (
         caught instanceof MemoryRepositoryError &&
