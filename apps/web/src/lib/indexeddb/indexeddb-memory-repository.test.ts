@@ -108,13 +108,13 @@ describe('IndexedDbMemoryRepository create/query', () => {
       createId: ids('m-a', 'e-a', 'ev-a', 'f-a'),
     }).create('Empate sintético A.');
 
-    await expect(new IndexedDbMemoryRepository({ factory }).query('Empate sintético')).resolves.toEqual(
-      {
-        status: 'FOUND',
-        answer: 'Empate sintético A.',
-        provenance: { memoryId: 'm-a', evidenceId: 'e-a', factId: 'f-a' },
-      },
-    );
+    await expect(
+      new IndexedDbMemoryRepository({ factory }).query('Empate sintético'),
+    ).resolves.toEqual({
+      status: 'FOUND',
+      answer: 'Empate sintético A.',
+      provenance: { memoryId: 'm-a', evidenceId: 'e-a', factId: 'f-a' },
+    });
   });
 
   it('reopens the same local database without losing records', async () => {

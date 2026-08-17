@@ -119,7 +119,9 @@ export class IndexedDbMemoryRepository {
       await done;
 
       const normalized = parsed.data.toLowerCase();
-      const matches = currentFacts.filter((fact) => fact.content.toLowerCase().includes(normalized));
+      const matches = currentFacts.filter((fact) =>
+        fact.content.toLowerCase().includes(normalized),
+      );
       matches.sort((left, right) => {
         const newest = right.recordedAt.getTime() - left.recordedAt.getTime();
         return newest !== 0 ? newest : left.factId.localeCompare(right.factId);
