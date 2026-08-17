@@ -27,7 +27,7 @@ describe('mdp-local IndexedDB schema', () => {
     const db = await openMdpLocalDatabase(new IDBFactory());
 
     expect(db.version).toBe(MDP_LOCAL_DB_VERSION);
-    expect([...db.objectStoreNames]).toEqual([...PRODUCT_STORES]);
+    expect([...db.objectStoreNames].sort()).toEqual([...PRODUCT_STORES].sort());
 
     db.close();
   });
