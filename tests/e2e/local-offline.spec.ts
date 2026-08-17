@@ -199,9 +199,7 @@ test('local storage failure never reports a successful memory write', async ({ b
   await page.goto('http://127.0.0.1:5173/');
   await waitLocalReady(page);
 
-  await page
-    .getByLabel('Lembrança', { exact: true })
-    .fill('Registro sintético que deve falhar.');
+  await page.getByLabel('Lembrança', { exact: true }).fill('Registro sintético que deve falhar.');
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByRole('alert')).toContainText('armazenamento local');
   await expect(page.getByText('Lembrança guardada.', { exact: true })).toHaveCount(0);
