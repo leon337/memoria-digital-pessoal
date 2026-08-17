@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createMemory, MemoryApiError, queryMemory } from './memory-api.js';
+import {
+  correctMemory,
+  createMemory,
+  getMemoryHistory,
+  MemoryApiError,
+  queryMemory,
+} from './memory-api.js';
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -57,5 +63,92 @@ describe('memory API client', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('http://api/query?q=%25_+sint%C3%A9tico');
     expect(result).toEqual({ status: 'UNKNOWN', answer: null, provenance: null });
+  });
+
+  it('posts exactly one correction request and validates the response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      response(
+        {
+          memoryId: 'm1',
+          current: {
+            factId: 'f2',
+            evidenceId: 'e2',
+            content: 'B.',
+            recordedAt: '2026-08-16T09:00:00.000Z',
+            correctedAt: '2026-08-17T05:00:00.000Z',
+          },
+          correction: { eventId: 'ev2', supersedesFactId: 'f1', reason: null },
+        },
+        201,
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await correctMemory('http://api/', 'm1', {
+      text: 'B.',
+      expectedCurrentFactId: 'f1',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('http://api/memories/m1/corrections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'B.', expectedCurrentFactId: 'f1' }),
+    });
+    expect(result.current.factId).toBe('f2');
+  });
+
+  it('preserves STALE_CORRECTION and does not retry', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      response(
+        {
+          error: {
+            code: 'STALE_CORRECTION',
+            message: 'A lembrança mudou desde a última consulta.',
+            requestId: 'r1',
+          },
+        },
+        409,
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      correctMemory('http://api', 'm1', { text: 'B.', expectedCurrentFactId: 'f1' }),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<MemoryApiError>>({
+        status: 409,
+        code: 'STALE_CORRECTION',
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads and validates history exactly once', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      response({
+        memoryId: 'm1',
+        versions: [
+          {
+            factId: 'f1',
+            evidenceId: 'e1',
+            content: 'A.',
+            createdAt: '2026-08-16T09:00:00.000Z',
+            reason: null,
+            isOriginal: true,
+            isCurrent: true,
+            supersedesFactId: null,
+            eventId: 'ev1',
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getMemoryHistory('http://api/', 'm1');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('http://api/memories/m1/history');
+    expect(result).toMatchObject({ memoryId: 'm1' });
   });
 });
