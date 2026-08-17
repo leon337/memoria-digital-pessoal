@@ -1,9 +1,18 @@
-import type { TextMemoryRecord } from '@mdp/domain';
+import {
+  CorrectionDomainError,
+  createTextCorrectionRecord,
+  orderTextFactHistory,
+  type TextMemoryRecord,
+} from '@mdp/domain';
+import { MemoryInvariantError } from '../../../memories/memory.errors.js';
 import {
   MemoryStoreUnavailableError,
+  type CorrectMemoryStoreInput,
+  type CorrectMemoryStoreResult,
   type MemoryStore,
   type QueryHit,
   type StoredMemory,
+  type StoredMemoryHistory,
 } from '../../../memories/memory.store.js';
 import { PrismaService } from './prisma.service.js';
 
@@ -123,7 +132,7 @@ export class PrismaMemoryStore implements MemoryStore {
           client.fact.findFirst({ where: { memoryId: id }, orderBy: { createdAt: 'asc' } }),
         ]);
         if (!evidence || !fact) {
-          throw new Error('Slice 01 persistence invariant violated: missing evidence or fact');
+          throw new MemoryInvariantError('missing original evidence or fact');
         }
         if (
           memory.occurredAt !== null ||
@@ -133,7 +142,7 @@ export class PrismaMemoryStore implements MemoryStore {
           fact.evidenceId !== evidence.id ||
           fact.content !== evidence.content
         ) {
-          throw new Error('Slice 01 persistence invariant violated: inconsistent memory record');
+          throw new MemoryInvariantError('inconsistent original memory record');
         }
 
         return {
@@ -176,6 +185,179 @@ export class PrismaMemoryStore implements MemoryStore {
           LIMIT 1
         `;
         return rows[0] ?? null;
+      }),
+    );
+  }
+
+  async correct(input: CorrectMemoryStoreInput): Promise<CorrectMemoryStoreResult> {
+    return this.withAvailabilityMapping(() =>
+      this.prisma.run((client) =>
+        client.$transaction(async (tx) => {
+          const locked = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT id
+            FROM memories
+            WHERE id = ${input.memoryId}::uuid
+            FOR UPDATE
+          `;
+          if (locked.length === 0) {
+            return { status: 'NOT_FOUND' as const };
+          }
+
+          const currentRows = await tx.currentFact.findMany({
+            where: { memoryId: input.memoryId },
+          });
+          if (currentRows.length !== 1) {
+            throw new MemoryInvariantError('expected exactly one current textual fact');
+          }
+          const current = currentRows[0];
+          if (!current) {
+            throw new MemoryInvariantError('missing current textual fact');
+          }
+          if (current.factId !== input.expectedCurrentFactId) {
+            return { status: 'STALE' as const, currentFactId: current.factId };
+          }
+
+          const record = createTextCorrectionRecord({
+            memoryId: input.memoryId,
+            previous: {
+              factId: current.factId,
+              evidenceId: current.evidenceId,
+              content: current.content,
+              recordedAt: current.recordedAt,
+            },
+            text: input.text,
+            reason: input.reason,
+            correctedAt: input.correctedAt,
+            ids: input.ids,
+          });
+
+          await tx.evidence.create({ data: record.evidence });
+          await tx.fact.create({ data: record.fact });
+          await tx.ledgerEvent.create({ data: record.event });
+
+          const changed = await tx.$executeRaw`
+            UPDATE current_facts
+            SET
+              fact_id = ${record.currentFact.factId}::uuid,
+              evidence_id = ${record.currentFact.evidenceId}::uuid,
+              content = ${record.currentFact.content}
+            WHERE fact_id = ${current.factId}::uuid
+              AND memory_id = ${input.memoryId}::uuid
+          `;
+          if (changed !== 1) {
+            throw new MemoryInvariantError('current projection update did not affect exactly one row');
+          }
+
+          return { status: 'CORRECTED' as const, record };
+        }),
+      ),
+    );
+  }
+
+  async history(memoryId: string): Promise<StoredMemoryHistory | null> {
+    return this.withAvailabilityMapping(() =>
+      this.prisma.run(async (client) => {
+        const memory = await client.memory.findUnique({ where: { id: memoryId } });
+        if (!memory) {
+          return null;
+        }
+
+        const [currentRows, facts, events] = await Promise.all([
+          client.currentFact.findMany({ where: { memoryId } }),
+          client.fact.findMany({
+            where: { memoryId },
+            include: { evidence: true },
+          }),
+          client.ledgerEvent.findMany({ where: { memoryId } }),
+        ]);
+
+        if (currentRows.length !== 1) {
+          throw new MemoryInvariantError('expected exactly one current textual fact');
+        }
+        const current = currentRows[0];
+        if (!current || facts.length === 0) {
+          throw new MemoryInvariantError('missing current or historical fact');
+        }
+        if (
+          current.memoryId !== memoryId ||
+          current.recordedAt.getTime() !== memory.recordedAt.getTime()
+        ) {
+          throw new MemoryInvariantError('inconsistent current projection');
+        }
+
+        for (const fact of facts) {
+          if (
+            fact.memoryId !== memoryId ||
+            fact.evidenceId !== fact.evidence.id ||
+            fact.evidence.memoryId !== memoryId ||
+            fact.kind !== 'autobiographical_statement' ||
+            fact.evidence.kind !== 'text' ||
+            fact.content !== fact.evidence.content
+          ) {
+            throw new MemoryInvariantError('inconsistent historical fact provenance');
+          }
+        }
+
+        let ordered;
+        try {
+          ordered = orderTextFactHistory(
+            facts.map((fact) => ({
+              factId: fact.id,
+              evidenceId: fact.evidenceId,
+              content: fact.content,
+              createdAt: fact.createdAt,
+              supersedesFactId: fact.supersedesFactId,
+            })),
+            current.factId,
+          );
+        } catch (error) {
+          if (error instanceof CorrectionDomainError && error.code === 'BROKEN_HISTORY') {
+            throw new MemoryInvariantError('broken fact history');
+          }
+          throw error;
+        }
+
+        const versions = ordered.map((node) => {
+          if (node.isOriginal) {
+            const creationEvents = events.filter(
+              (event) => event.type === 'MEMORY_CREATED' && event.evidenceId === node.evidenceId,
+            );
+            if (creationEvents.length !== 1) {
+              throw new MemoryInvariantError('missing or duplicate original creation event');
+            }
+            const event = creationEvents[0];
+            if (!event) {
+              throw new MemoryInvariantError('missing original creation event');
+            }
+            return {
+              ...node,
+              eventId: event.id,
+              reason: null,
+            };
+          }
+
+          const correctionEvents = events.filter(
+            (event) => event.type === 'MEMORY_CORRECTED' && event.factId === node.factId,
+          );
+          if (correctionEvents.length !== 1) {
+            throw new MemoryInvariantError('missing or duplicate correction event');
+          }
+          const event = correctionEvents[0];
+          if (
+            !event ||
+            event.evidenceId !== node.evidenceId ||
+            event.supersedesFactId !== node.supersedesFactId
+          ) {
+            throw new MemoryInvariantError('inconsistent correction event provenance');
+          }
+          return {
+            ...node,
+            eventId: event.id,
+            reason: event.reason,
+          };
+        });
+
+        return { memoryId, versions };
       }),
     );
   }
