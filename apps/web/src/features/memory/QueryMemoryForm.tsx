@@ -1,9 +1,18 @@
 import { MEMORY_QUERY_MAX_LENGTH, type MemoryQueryResponse } from '@mdp/contracts';
 import { useState, type FormEvent } from 'react';
-import { queryMemory } from '../../lib/memory-api.js';
+import {
+  MemoryRepositoryError,
+  type MemoryRepository,
+} from '../../lib/memory-repository.js';
 import { MemoryFoundResult } from './MemoryFoundResult.js';
 
-export function QueryMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; enabled: boolean }) {
+export function QueryMemoryForm({
+  repository,
+  enabled,
+}: {
+  repository: MemoryRepository;
+  enabled: boolean;
+}) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MemoryQueryResponse | null>(null);
@@ -21,9 +30,21 @@ export function QueryMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; e
 
     setLoading(true);
     try {
-      setResult(await queryMemory(apiBaseUrl, normalized));
-    } catch {
-      setError('Não foi possível consultar as lembranças agora.');
+      setResult(await repository.query(normalized));
+    } catch (caught) {
+      if (
+        caught instanceof MemoryRepositoryError &&
+        caught.code === 'LOCAL_STORAGE_UNAVAILABLE'
+      ) {
+        setError('Não foi possível consultar porque o armazenamento local está indisponível.');
+      } else if (
+        caught instanceof MemoryRepositoryError &&
+        caught.code === 'LOCAL_DATA_INTEGRITY_ERROR'
+      ) {
+        setError('Não foi possível validar as lembranças armazenadas localmente.');
+      } else {
+        setError('Não foi possível consultar as lembranças locais agora.');
+      }
     } finally {
       setLoading(false);
     }
@@ -53,7 +74,7 @@ export function QueryMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; e
       </form>
 
       {result?.status === 'FOUND' ? (
-        <MemoryFoundResult apiBaseUrl={apiBaseUrl} result={result} onCurrentChange={setResult} />
+        <MemoryFoundResult repository={repository} result={result} onCurrentChange={setResult} />
       ) : null}
       {result?.status === 'UNKNOWN' ? (
         <p role="status" aria-live="polite" className="feedback">

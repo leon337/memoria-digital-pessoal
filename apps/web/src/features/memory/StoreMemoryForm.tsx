@@ -1,8 +1,17 @@
 import { MEMORY_TEXT_MAX_LENGTH } from '@mdp/contracts';
 import { useState, type FormEvent } from 'react';
-import { createMemory } from '../../lib/memory-api.js';
+import {
+  MemoryRepositoryError,
+  type MemoryRepository,
+} from '../../lib/memory-repository.js';
 
-export function StoreMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; enabled: boolean }) {
+export function StoreMemoryForm({
+  repository,
+  enabled,
+}: {
+  repository: MemoryRepository;
+  enabled: boolean;
+}) {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<
@@ -19,14 +28,29 @@ export function StoreMemoryForm({ apiBaseUrl, enabled }: { apiBaseUrl: string; e
 
     setSaving(true);
     try {
-      await createMemory(apiBaseUrl, text);
+      await repository.create(text);
       setText('');
       setMessage({ kind: 'success', text: 'Lembrança guardada.' });
-    } catch {
-      setMessage({
-        kind: 'error',
-        text: 'Não foi possível guardar a lembrança. Tente novamente quando o serviço estiver disponível.',
-      });
+    } catch (error) {
+      if (
+        error instanceof MemoryRepositoryError &&
+        error.code === 'LOCAL_STORAGE_UNAVAILABLE'
+      ) {
+        setMessage({
+          kind: 'error',
+          text: 'Não foi possível guardar a lembrança porque o armazenamento local está indisponível.',
+        });
+      } else if (
+        error instanceof MemoryRepositoryError &&
+        error.code === 'VALIDATION_FAILED'
+      ) {
+        setMessage({ kind: 'error', text: 'Revise o texto da lembrança antes de guardar.' });
+      } else {
+        setMessage({
+          kind: 'error',
+          text: 'Não foi possível guardar a lembrança no armazenamento local.',
+        });
+      }
     } finally {
       setSaving(false);
     }

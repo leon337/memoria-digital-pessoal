@@ -1,21 +1,35 @@
 import { useEffect, useState } from 'react';
 import { QueryMemoryForm } from './features/memory/QueryMemoryForm.js';
 import { StoreMemoryForm } from './features/memory/StoreMemoryForm.js';
-import { getApiReadiness } from './lib/api-health.js';
+import type { MemoryRepository } from './lib/memory-repository.js';
+import { useConnectivity } from './lib/use-connectivity.js';
 
-export function App({ apiBaseUrl }: { apiBaseUrl: string }) {
+export function App({ repository }: { repository: MemoryRepository }) {
   const [status, setStatus] = useState<'checking' | 'ready' | 'unavailable'>('checking');
+  const connectivity = useConnectivity();
 
   useEffect(() => {
-    void getApiReadiness(apiBaseUrl).then(setStatus);
-  }, [apiBaseUrl]);
+    let active = true;
+    setStatus('checking');
+    void repository.ready().then(
+      () => {
+        if (active) setStatus('ready');
+      },
+      () => {
+        if (active) setStatus('unavailable');
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [repository]);
 
-  const text =
+  const readinessText =
     status === 'checking'
-      ? 'Verificando API…'
+      ? 'Preparando armazenamento local…'
       : status === 'ready'
-        ? 'API pronta'
-        : 'API indisponível';
+        ? 'Armazenamento local pronto'
+        : 'Armazenamento local indisponível';
   const enabled = status === 'ready';
 
   return (
@@ -28,13 +42,16 @@ export function App({ apiBaseUrl }: { apiBaseUrl: string }) {
           pessoais ou lembranças reais nesta versão.
         </aside>
         <p role="status" aria-live="polite" className="api-status">
-          {text}
+          {readinessText}
+        </p>
+        <p className="connectivity-status" aria-live="polite">
+          {connectivity === 'online' ? 'Online' : 'Offline'}
         </p>
       </header>
 
       <div className="memory-grid">
-        <StoreMemoryForm apiBaseUrl={apiBaseUrl} enabled={enabled} />
-        <QueryMemoryForm apiBaseUrl={apiBaseUrl} enabled={enabled} />
+        <StoreMemoryForm repository={repository} enabled={enabled} />
+        <QueryMemoryForm repository={repository} enabled={enabled} />
       </div>
     </main>
   );
