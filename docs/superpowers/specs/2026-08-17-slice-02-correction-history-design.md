@@ -43,7 +43,7 @@ The following decisions are part of the approved design:
 5. Historical versions are available through explicit history viewing.
 6. A correction may itself be corrected repeatedly.
 7. Correction reason is optional.
-8. Empty or non-useful corrected text is rejected.
+8. Empty or whitespace-only corrected text is rejected; Slice 02 does not use AI or semantic judgment to decide whether text is "useful".
 9. Only textual content is correctable in Slice 02.
 10. Corrections use complete replacement text, not patches/diffs.
 11. A correction based on a stale current version is rejected.
@@ -94,51 +94,70 @@ For every accepted correction, create a new text evidence row with:
 - new globally unique evidence ID;
 - same `memoryId` as the memory being corrected;
 - `kind = text`;
-- complete corrected content;
+- complete normalized corrected content;
 - correction timestamp.
 
 The original evidence and all previous correction evidence remain unchanged.
 
 ### 4.2 Fact
 
-`Fact` remains immutable and gains an optional predecessor/supersession relation equivalent to:
+`Fact` remains immutable and gains a nullable self-reference semantically equivalent to:
 
 ```text
 supersedesFactId: UUID | null
 ```
 
-Rules:
+The persistence design is fixed for this slice:
 
-- original Slice 01 fact: `supersedesFactId = null`;
-- each correction fact: `supersedesFactId = immediate previous current fact ID`;
-- predecessor must belong to the same memory;
-- one historical fact must not have multiple accepted successors inside this single-writer Slice 02 correction model;
-- history must not depend on timestamp ordering for logical linkage.
+- database column: `facts.supersedes_fact_id UUID NULL`;
+- foreign key: `facts.supersedes_fact_id → facts.id` with restrictive deletion semantics;
+- unique constraint/index on non-null `supersedes_fact_id`, preventing two accepted facts from superseding the same predecessor;
+- original Slice 01 facts have `supersedesFactId = null`;
+- each correction fact sets `supersedesFactId` to the immediately previous current fact ID.
 
-Exact Prisma relation naming may follow repository conventions during implementation, but the semantic relationship is mandatory.
+A correction service/store must additionally verify that predecessor and successor belong to the same `memoryId`. This same-memory rule is a domain/persistence invariant even where Prisma cannot express it as a simple single-column relation.
+
+History must not depend on timestamp ordering for logical linkage.
 
 ### 4.3 LedgerEvent
 
 Slice 02 introduces `MEMORY_CORRECTED` as a distinct immutable event type.
 
-A correction event must be traceable to:
+The physical persistence representation is explicit columns on the existing `ledger_events` table; no generic JSON payload is introduced in this slice.
 
-- the memory;
-- the new correction evidence;
-- the previous fact being superseded;
-- the new fact created by the correction;
-- correction timestamp;
-- optional correction reason when supplied.
+Add nullable columns:
 
-The exact persistence shape may use explicit nullable columns or a narrowly typed payload only if it preserves referential integrity, deterministic querying and existing domain isolation. The implementation plan must choose one concrete representation before code is written.
+```text
+fact_id              UUID NULL
+supersedes_fact_id   UUID NULL
+reason               VARCHAR(500) NULL
+```
+
+Rules:
+
+- `fact_id` references `facts.id` with restrictive deletion semantics;
+- `supersedes_fact_id` references `facts.id` with restrictive deletion semantics;
+- for every new `MEMORY_CORRECTED` event, `fact_id` is the newly created fact and `supersedes_fact_id` is the previous fact;
+- `evidence_id` remains the new correction evidence;
+- `memory_id` remains the corrected memory;
+- `reason` is optional, trimmed, and omitted/null when empty after trimming;
+- a migration-level PostgreSQL check constraint requires `fact_id` and `supersedes_fact_id` to be non-null when `type = 'MEMORY_CORRECTED'`;
+- application/persistence invariants require the event memory, new fact, previous fact and evidence to all belong to the same memory;
+- the new fact's `supersedesFactId` must equal the event's `supersedes_fact_id`.
+
+Existing `MEMORY_CREATED` rows are preserved unchanged; their new correction-specific columns may remain null. The original event remains traceable through its existing memory/evidence relation and the original fact remains traceable through that evidence.
 
 ### 4.4 CurrentFact
 
 `CurrentFact` remains a projection, not history.
 
-For the textual-memory boundary there must be exactly one current textual fact per memory. After an accepted correction it must reference the newest fact and newest evidence and expose the newest full text.
+Within the Slice 01/02 `autobiographical_statement` boundary there is one current textual fact per stored memory. After an accepted correction it references the newest fact and newest evidence and exposes the newest complete text.
 
-The historical chain must remain reconstructible even if `CurrentFact` is rebuilt.
+`CurrentFact.recordedAt` continues to mean the original memory recording timestamp and does **not** change when a correction is made. Version/correction time comes from the new evidence/fact/event `createdAt` fields. This preserves existing literal-query ordering semantics instead of making a correction appear to be a newly recorded memory.
+
+No global `UNIQUE(memory_id)` constraint is added to `current_facts` in Slice 02, because later architecture may allow multiple current atomic facts per memory. The one-current-autobiographical-fact guarantee is enforced by the current boundary's repository/domain behavior and tests.
+
+The historical chain must remain reconstructible if `CurrentFact` is rebuilt.
 
 ## 5. Domain invariants
 
@@ -151,14 +170,44 @@ The following invariants are mandatory and require executable proof:
 5. **Same-memory linkage** — a fact cannot supersede a fact from another memory.
 6. **Current-only normal retrieval** — normal memory query exposes only the current state.
 7. **Deterministic history** — history is reconstructed by explicit links and returned original-to-current.
-8. **Optimistic concurrency** — correction is accepted only when its expected current fact still matches the persisted current fact.
+8. **Optimistic concurrency** — correction is accepted only when its expected current fact still matches the persisted current fact after database-safe serialization.
 9. **No-change rejection** — normalized identical current/corrected content creates no new records.
-10. **Empty rejection** — empty/invalid text creates no new records.
+10. **Empty rejection** — empty/whitespace-only text creates no new records.
 11. **Atomicity** — evidence, correction event, new fact and current projection change either all commit or all roll back.
 12. **Undo by append** — returning to old text is represented as a new correction, never a destructive pointer rewind.
 13. **Provenance completeness** — every historical displayed version can be traced to its evidence and corresponding creation/correction ledger record.
+14. **Recorded-time stability** — correction does not rewrite the memory's original recording timestamp.
 
-## 6. Correction command
+## 6. Validation and normalization
+
+Correction text uses the same maximum length as stored memory text: `4000` characters.
+
+Deterministic normalization for correction is:
+
+```text
+normalizedText = input.text.trim()
+```
+
+Rules:
+
+- `normalizedText.length` must be between `1` and `4000`;
+- accepted correction evidence/fact content stores `normalizedText`;
+- no-change comparison uses `normalizedText === current.content.trim()`;
+- no semantic/AI-based "usefulness" classifier is used.
+
+Optional reason normalization is:
+
+```text
+normalizedReason = input.reason?.trim()
+```
+
+Rules:
+
+- empty normalized reason becomes absent/null;
+- non-empty reason maximum length is `500` characters;
+- reason is metadata of the correction event, not canonical memory content.
+
+## 7. Correction command and concurrency
 
 Conceptual input:
 
@@ -167,7 +216,7 @@ CorrectTextMemory {
   memoryId
   expectedCurrentFactId
   text
-  reason? 
+  reason?
   correctedAt
   generatedIds {
     evidenceId
@@ -177,27 +226,47 @@ CorrectTextMemory {
 }
 ```
 
-Validation order must ensure invalid requests do not create side effects.
+Validation order must ensure invalid requests do not create persistent side effects.
+
+The concurrency mechanism for this slice is fixed: correction transactions serialize per memory by locking the stable `memories` row with PostgreSQL `SELECT ... FOR UPDATE` (or the Prisma transaction equivalent implemented through explicit SQL).
 
 Conceptual successful transaction:
 
 ```text
 BEGIN
-  read current fact for memory with concurrency-safe semantics
-  verify memory/current fact exists
-  verify current fact == expectedCurrentFactId
-  normalize/validate corrected text
-  reject empty/no-change
+  lock Memory(memoryId) row FOR UPDATE
+  if memory does not exist → NOT_FOUND
+
+  read the current autobiographical CurrentFact for that memory
+  verify the current projection is internally consistent
+
+  if current.factId != expectedCurrentFactId → STALE_CORRECTION
+
+  normalize/validate corrected text and optional reason
+  if normalized corrected text == normalized current text → NO_CHANGE
+
   create correction Evidence
-  create corrected Fact(supersedes = previous fact)
-  create MEMORY_CORRECTED event(previous fact, new fact, new evidence, optional reason)
-  replace/reproject CurrentFact to new fact/evidence/content
+  create corrected Fact(supersedesFactId = previous current factId)
+  create MEMORY_CORRECTED event(
+    memory,
+    new evidence,
+    new fact,
+    previous fact,
+    optional reason
+  )
+  replace/reproject the existing CurrentFact row to the new fact/evidence/content
+  preserve CurrentFact.recordedAt
 COMMIT
 ```
 
-The database implementation must make stale concurrent writes unable to both succeed. Merely checking in application memory before an unguarded update is insufficient.
+Why the stable memory-row lock is required:
 
-## 7. History query
+- two correction requests for the same memory cannot both pass the stale-current check concurrently;
+- the second transaction observes the first transaction's committed current fact and becomes `STALE_CORRECTION` if it used the old expected fact;
+- the unique `facts.supersedes_fact_id` constraint is an additional database-level fork-prevention defense;
+- all writes remain inside the same transaction, so any unique/FK/check failure rolls the complete correction back.
+
+## 8. History query
 
 History is an explicit operation separate from normal retrieval.
 
@@ -207,31 +276,34 @@ For a valid memory, history returns one or more ordered versions:
 original → correction 1 → correction 2 → ... → current
 ```
 
-Each history item exposes enough information for the UI and provenance proof:
+The repository reconstructs semantic order from `Fact.supersedesFactId`; timestamps are display metadata, not the source of chain order.
+
+Each history item exposes:
 
 - `memoryId`;
 - `factId`;
 - `evidenceId`;
 - complete text content;
-- recorded/correction timestamp appropriate to that version;
+- version timestamp (`Fact.createdAt` / corresponding evidence-event time);
 - optional reason;
 - `isOriginal`;
 - `isCurrent`;
-- predecessor fact ID when applicable.
+- predecessor fact ID when applicable;
+- correction event ID for corrected versions; original creation event ID may be exposed as provenance when resolved through the original evidence.
 
 A never-corrected memory returns exactly one version with both `isOriginal = true` and `isCurrent = true`.
 
-History ordering is semantic chain ordering, not best-effort timestamp sorting.
+History retrieval must detect and fail safely on impossible persistence states such as broken predecessor links, cross-memory links, multiple successors, or a `CurrentFact` that is not the chain tip. It must not silently invent an ordering.
 
-## 8. API contract
+## 9. API contract
 
-### 8.1 Create correction
+### 9.1 Create correction
 
 ```http
 POST /memories/:memoryId/corrections
 ```
 
-Request concept:
+Request:
 
 ```json
 {
@@ -241,38 +313,81 @@ Request concept:
 }
 ```
 
-Success returns the new current state and provenance identifiers required by the PWA.
+Successful response concept:
 
-### 8.2 Read history
+```json
+{
+  "memoryId": "uuid",
+  "current": {
+    "factId": "uuid",
+    "evidenceId": "uuid",
+    "content": "normalized corrected complete text",
+    "recordedAt": "original-memory-recording-timestamp",
+    "correctedAt": "correction-timestamp"
+  },
+  "correction": {
+    "eventId": "uuid",
+    "supersedesFactId": "uuid",
+    "reason": "optional reason or null"
+  }
+}
+```
+
+The exact TypeScript type names may follow existing package conventions, but these semantics and identifiers are required.
+
+### 9.2 Read history
 
 ```http
 GET /memories/:memoryId/history
 ```
 
-Returns the complete chronological version chain.
+Successful response concept:
 
-### 8.3 Existing normal query
+```json
+{
+  "memoryId": "uuid",
+  "versions": [
+    {
+      "factId": "uuid",
+      "evidenceId": "uuid",
+      "content": "full text",
+      "createdAt": "timestamp",
+      "reason": null,
+      "isOriginal": true,
+      "isCurrent": false,
+      "supersedesFactId": null,
+      "eventId": "uuid"
+    }
+  ]
+}
+```
 
-The existing literal deterministic memory query retains its Slice 01 semantics: normal lookup searches current state and returns `FOUND` or `UNKNOWN`.
+`versions` is always non-empty for an existing valid memory and is ordered original-to-current.
 
-A `FOUND` response is extended only as needed to expose stable identifiers such as `memoryId`, current `factId` and provenance required to initiate correction/history. It must not start returning superseded text during ordinary search.
+### 9.3 Existing normal query
 
-## 9. Error semantics
+The existing literal deterministic memory query retains its Slice 01 semantics: normal lookup searches `current_facts` and returns `FOUND` or `UNKNOWN`.
 
-The API must expose deterministic, testable failure categories.
+The existing `FOUND` contract already exposes `memoryId`, `evidenceId` and `factId` in provenance, so Slice 02 must reuse those identifiers rather than introduce a second lookup identity. Ordinary query must never start returning superseded text.
+
+## 10. Error semantics
+
+The API exposes deterministic, testable failure categories using the existing structured-error approach.
 
 Minimum behavior:
 
-- memory not found → `404`;
-- stale `expectedCurrentFactId` → `409` with stable code `STALE_CORRECTION`;
-- empty/invalid corrected text → validation failure (`422` unless existing contract conventions require another established validation status);
-- text equal to current content after the same canonical normalization used for comparison → `422` with stable code `NO_CHANGE`;
-- persistent store unavailable → safe `503` behavior consistent with the Slice 01 storage-outage contract;
+- memory not found → HTTP `404` with stable not-found code;
+- stale `expectedCurrentFactId` → HTTP `409`, code `STALE_CORRECTION`;
+- empty/whitespace-only or over-4000 corrected text → HTTP `422`, stable validation code;
+- corrected text equal to current content after defined trimming normalization → HTTP `422`, code `NO_CHANGE`;
+- optional reason over 500 characters → HTTP `422`, stable validation code;
+- persistent store unavailable → HTTP `503`, preserving Slice 01 storage-outage behavior;
+- detected broken history/persistence invariant → safe server error with no fabricated history;
 - unexpected failure inside the correction transaction → no partial correction state.
 
-The implementation plan must reuse existing structured-error conventions rather than creating parallel error machinery.
+No correction error path may automatically retry with a different expected fact or silently overwrite a newer version.
 
-## 10. PWA experience
+## 11. PWA experience
 
 The current Slice 01 query card remains the entry point.
 
@@ -282,7 +397,7 @@ When a query returns `FOUND`:
 - provenance remains visible;
 - actions `Corrigir` and `Ver histórico` are shown.
 
-### 10.1 Inline correction
+### 11.1 Inline correction
 
 Selecting `Corrigir` opens an inline form in the result area.
 
@@ -297,17 +412,17 @@ On successful save:
 
 - correction form closes;
 - visible result immediately changes to corrected text;
-- local current `factId` is replaced by the returned new fact ID;
+- local current `factId` and `evidenceId` are replaced by returned current provenance;
 - concise success feedback is announced accessibly.
 
 If the server returns `STALE_CORRECTION`:
 
 - no overwrite/retry is performed automatically;
 - user is told that the memory changed;
-- the stale result is not treated as current;
+- the stale result is no longer treated as an editable current version;
 - a new query/refresh is required before another correction attempt.
 
-### 10.2 Inline history
+### 11.2 Inline history
 
 Selecting `Ver histórico` opens an inline history section.
 
@@ -325,54 +440,73 @@ Each visible version includes:
 - provenance/source information;
 - optional reason when present.
 
-A historical version may offer `Usar este texto como nova correção`. This action pre-fills/initiates the ordinary correction flow; it does not alter old records or rewind `CurrentFact` directly.
+A historical version may offer `Usar este texto como nova correção`. This action fills the ordinary correction form with that version's text while using the **currently displayed current `factId`** as `expectedCurrentFactId`; it does not submit the historical fact ID as the concurrency base and does not rewind `CurrentFact` directly.
 
-### 10.3 Accessibility and lab boundary
+### 11.3 Accessibility and lab boundary
 
 Existing accessible status/error patterns must be preserved or improved for the new controls.
 
 The laboratory warning remains visible. Slice 02 continues to require synthetic data only.
 
-## 11. Testing strategy
+## 12. Testing strategy
 
 Slice 02 uses cumulative regression plus boundary-specific tests.
 
-### 11.1 Domain/unit invariant tests
+### 12.1 Domain/unit invariant tests
 
 Minimum proofs:
 
 - first correction creates an immutable successor;
 - multiple corrections form a linear chain;
 - predecessor belongs to same memory;
-- no-change rejected without generated domain output intended for persistence;
+- no-change rejected;
 - empty content rejected;
+- trimming normalization is deterministic;
+- reason normalization/limit is deterministic;
 - undo is append-only;
 - history semantics mark original/current correctly.
 
-### 11.2 Persistence/integration tests
+### 12.2 Persistence/integration tests
 
 Minimum proofs with PostgreSQL:
 
-- correction transaction creates exactly the required new immutable records and reprojection;
-- original rows remain byte/field stable where applicable;
+- migration preserves every existing Slice 01 row;
+- correction transaction creates exactly the required evidence, fact, event and reprojection;
+- original rows remain field-stable;
+- `Fact.supersedesFactId` unique constraint prevents a persisted fork;
+- correction event check constraint requires both fact links;
+- event/fact/evidence/memory consistency is validated;
 - stale expected fact is rejected;
 - two competing corrections using the same expected current fact cannot both commit successfully;
-- transaction failure at a controlled intermediate step leaves no partial correction;
+- transaction failure at controlled intermediate points leaves no partial correction;
 - history reconstructs the full chain in semantic order;
 - current query ignores superseded facts;
+- `CurrentFact.recordedAt` remains the original recorded timestamp after correction;
 - database-unavailable behavior remains safely mapped to service-unavailable semantics.
 
-### 11.3 API/contract tests
+### 12.3 API/contract tests
 
 Minimum proofs:
 
 - correction success response;
 - history response for one-version and multi-version memories;
-- `404`, `STALE_CORRECTION`, empty input, `NO_CHANGE`, store unavailable;
-- `FOUND` current-query contract exposes correction identifiers without exposing historical versions by default;
+- `404`, `STALE_CORRECTION`, invalid text, oversized reason, `NO_CHANGE`, store unavailable;
+- `FOUND` current-query contract continues exposing current provenance without historical versions;
 - `UNKNOWN` behavior remains intact.
 
-### 11.4 Browser E2E
+### 12.4 Web component/UI tests
+
+Minimum proofs:
+
+- `FOUND` result exposes `Corrigir` and `Ver histórico`;
+- correction form is prefilled;
+- successful correction refreshes visible current content/provenance and closes the form;
+- stale correction disables treating the old result as current until refresh/new query;
+- history displays original-to-current order;
+- `Usar este texto como nova correção` uses old content but current fact as concurrency base;
+- accessible status/error announcements remain present.
+
+### 12.5 Browser E2E
 
 At least one reproducible end-to-end scenario must prove:
 
@@ -390,28 +524,31 @@ store synthetic memory
 → history still contains every intermediate version
 ```
 
-Additional E2E or integration coverage must prove the user-visible stale-correction behavior if practical at browser level; otherwise it must be proven at integration/API level plus a focused UI test.
+User-visible stale-correction behavior must be proven either by browser E2E or by API/integration concurrency proof plus a focused UI test that consumes the `STALE_CORRECTION` response.
 
-## 12. Acceptance criteria
+## 13. Acceptance criteria
 
 Slice 02 is acceptable only when all of the following are reproducibly demonstrated:
 
 1. A stored textual memory can be corrected from the PWA.
 2. Normal retrieval returns only the latest accepted corrected state.
-3. The original evidence/fact remains preserved.
+3. The original evidence/fact/event remain preserved.
 4. Every correction has its own evidence, fact and `MEMORY_CORRECTED` ledger record.
-5. Multiple corrections retain a complete linear history.
-6. History is visible in chronological chain order in the PWA.
-7. A one-version memory has valid history.
-8. Empty and no-change requests create no persistent records.
-9. A stale correction cannot overwrite a newer correction.
-10. Correction is transactionally atomic.
-11. Undo appends a new correction instead of deleting/repointing history.
-12. Existing Slice 01 deterministic retrieval, provenance, `UNKNOWN`, E2E and outage guarantees do not regress.
-13. Required tests, builds, lint/typecheck/format, migrations and CI are green.
-14. Evidence/PRF artifacts are sufficient for independent review and gate decision.
+5. Every correction event explicitly traces new evidence, previous fact and new fact.
+6. Multiple corrections retain a complete linear history.
+7. History is visible in chronological chain order in the PWA.
+8. A one-version memory has valid history.
+9. Empty, invalid and no-change requests create no persistent records.
+10. A stale correction cannot overwrite a newer correction.
+11. Two concurrent corrections using the same expected current fact cannot both succeed.
+12. Correction is transactionally atomic.
+13. Undo appends a new correction instead of deleting/repointing history.
+14. Original memory recorded time remains stable after corrections.
+15. Existing Slice 01 deterministic retrieval, provenance, `UNKNOWN`, E2E and outage guarantees do not regress.
+16. Required tests, builds, lint/typecheck/format, migrations and CI are green.
+17. Evidence/PRF artifacts are sufficient for independent review and gate decision.
 
-## 13. Explicit exclusions
+## 14. Explicit exclusions
 
 Slice 02 does not include:
 
@@ -435,23 +572,23 @@ Slice 02 does not include:
 
 No later roadmap capability may be inferred as authorized by approval of this design.
 
-## 14. Files/components expected to be affected during future implementation
+## 15. Files/components expected to be affected during future implementation
 
 This is a design map, not an implementation authorization.
 
 Likely boundary-local changes include:
 
 - `packages/domain` — correction/history domain types and invariants;
-- `packages/contracts` — correction/history request/response/error contracts;
-- `prisma/schema.prisma` and a versioned migration — predecessor/event traceability structure;
-- `apps/api` memory application/persistence/controller layers — transactional correction and history read;
+- `packages/contracts` — correction/history request/response/error contracts and normalization limits;
+- `prisma/schema.prisma` and one versioned Slice 02 migration — fact predecessor and correction-event traceability structure;
+- `apps/api` memory application/persistence/controller layers — per-memory locked transactional correction and history read;
 - `apps/web` memory API client and query result UI — inline correction/history;
 - integration/API/UI/E2E tests;
 - Slice 02 evidence, phase and PRF documentation.
 
 Unrelated refactors are excluded.
 
-## 15. Delivery and governance
+## 16. Delivery and governance
 
 The eventual implementation boundary follows the repository's established progression:
 
@@ -468,15 +605,19 @@ implementation
 
 Approval of this design document does not itself authorize implementation. After LEANDRO reviews the committed written specification, the next permitted design-process step is to create an implementation plan. Starting product code requires the subsequently applicable project/MCF authorization.
 
-## 16. Design self-review checklist
+## 17. Design self-review checklist
 
 Before requesting written-spec approval, verify:
 
-- no `TBD`/`TODO` placeholders;
-- no contradiction between current-only retrieval and historical retrieval;
-- stale-write rule has a database-safe concurrency requirement;
+- no unresolved placeholder markers;
+- concrete correction-event persistence shape is fixed;
+- correction validation and no-change normalization are deterministic;
+- no contradiction exists between current-only retrieval and explicit historical retrieval;
+- stale-write rule has a database-safe per-memory serialization mechanism;
+- the database has an additional fork-prevention constraint;
 - every accepted correction is append-only except for the reconstructible `CurrentFact` projection;
-- undo semantics are append-only;
+- undo semantics are append-only and use the current fact as concurrency base;
+- `CurrentFact.recordedAt` semantics are stable;
 - real sensitive data and pilot remain prohibited;
 - offline, sync, AI, voice and purge remain out of scope;
 - the scope is small enough for one implementation plan and one Slice 02 PR boundary.
