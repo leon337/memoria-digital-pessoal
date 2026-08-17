@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 async function waitLocalReady(page: Page): Promise<void> {
   await expect(page.getByText('Armazenamento local pronto')).toBeVisible();
