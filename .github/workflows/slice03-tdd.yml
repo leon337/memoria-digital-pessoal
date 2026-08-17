@@ -37,6 +37,7 @@ jobs:
       - run: pnpm build:packages
       - run: pnpm --filter @mdp/web typecheck
       - run: pnpm --filter @mdp/web test
+      - run: pnpm exec vitest run tests/architecture/slice-03-scope.test.ts
       - run: pnpm --filter @mdp/web build
       - run: node scripts/verify-slice03-pwa.mjs
       - run: pnpm exec playwright install --with-deps chromium
