@@ -10,18 +10,13 @@ async function dependencies(path: string): Promise<string[]> {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
-  return [
-    ...Object.keys(parsed.dependencies ?? {}),
-    ...Object.keys(parsed.devDependencies ?? {}),
-  ];
+  return [...Object.keys(parsed.dependencies ?? {}), ...Object.keys(parsed.devDependencies ?? {})];
 }
 
 describe('Slice 02 scope invariants', () => {
   it('keeps exactly five product models while adding correction lineage fields', async () => {
     const schema = await text('prisma/schema.prisma');
-    const models = [...schema.matchAll(/^model\s+(\w+)\s+\{/gm)]
-      .map((match) => match[1])
-      .sort();
+    const models = [...schema.matchAll(/^model\s+(\w+)\s+\{/gm)].map((match) => match[1]).sort();
 
     expect(models).toEqual(['CurrentFact', 'Evidence', 'Fact', 'LedgerEvent', 'Memory']);
     expect(schema).toContain('supersedesFactId');
@@ -37,7 +32,7 @@ describe('Slice 02 scope invariants', () => {
 
     expect(migration).toContain('CREATE UNIQUE INDEX "facts_supersedes_fact_id_key"');
     expect(migration).toContain('ledger_events_memory_corrected_fact_links_check');
-    expect(migration).toContain("\"type\" <> 'MEMORY_CORRECTED'");
+    expect(migration).toContain('"type" <> \'MEMORY_CORRECTED\'');
     expect(migration).toContain('"fact_id" IS NOT NULL');
     expect(migration).toContain('"supersedes_fact_id" IS NOT NULL');
   });
