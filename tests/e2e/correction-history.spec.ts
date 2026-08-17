@@ -13,9 +13,7 @@ test('corrects text, preserves history and restores an old version by appending 
     'Use somente dados sintéticos',
   );
 
-  await page
-    .getByRole('textbox', { name: 'Lembrança' })
-    .fill('Minha irmã sintética se chama Ana.');
+  await page.getByRole('textbox', { name: 'Lembrança' }).fill('Minha irmã sintética se chama Ana.');
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByText('Lembrança guardada.')).toBeVisible();
 
@@ -53,10 +51,7 @@ test('corrects text, preserves history and restores an old version by appending 
   await expect(versions.nth(1)).toContainText('Atual');
   await expect(versions.nth(1)).toContainText('Minha irmã sintética se chama Beatriz.');
 
-  await versions
-    .nth(0)
-    .getByRole('button', { name: 'Usar este texto como nova correção' })
-    .click();
+  await versions.nth(0).getByRole('button', { name: 'Usar este texto como nova correção' }).click();
   await expect(page.getByRole('textbox', { name: 'Texto corrigido' })).toHaveValue(
     'Minha irmã sintética se chama Ana.',
   );
