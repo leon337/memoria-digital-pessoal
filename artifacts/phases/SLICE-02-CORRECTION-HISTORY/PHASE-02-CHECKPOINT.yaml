@@ -1,0 +1,40 @@
+mission_id: MDP-001
+phase_id: SLICE-02
+title: Correction & History
+risk_class: B
+state: READY_FOR_GOVERNANCE
+phase_complete: false
+technical_validation:
+  status: PASS
+  validated_branch_head: 361214e97e9b70df7092ee1f6d5c3944446edda0
+  ci_run: 32000681041
+  ci_job: 95300284264
+  automated_tests:
+    passed: 95
+    total: 95
+  e2e:
+    passed: 3
+    total: 3
+  physical_schema: PASS
+  correction_outage_safe_503: PASS
+pull_request:
+  number: 4
+  state: OPEN
+  merged: false
+gates:
+  independent_emily_audit:
+    status: NOT_PERFORMED
+    claimed: false
+  leo_internal_gate:
+    status: NOT_PERFORMED
+    claimed: false
+  human_gate:
+    authority: LEANDRO
+    decision: PENDING
+merge_authorized: false
+merge_executed: false
+post_merge_validation: PENDING
+real_sensitive_data_authorized: false
+pilot_authorized: false
+slice03_authorized: false
+human_action_required: true
