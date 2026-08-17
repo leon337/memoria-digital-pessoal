@@ -6,7 +6,7 @@
 
 ## Status
 
-`IN_REVIEW / READY_FOR_GATE`
+`COMPLETE / ENTREGUE / MERGED / POST-MERGE VALIDATED`
 
 ## Boundary
 
@@ -22,16 +22,23 @@ text input
 → FOUND + provenance or UNKNOWN
 ```
 
-## Reviewed implementation
+## Final integration
 
-- Branch: `slice/01-trusted-text-memory`
-- Pull request: `#2 — SLICE 01: trusted text memory` — OPEN / NOT MERGED
-- Reviewed code HEAD: `07a41381f7bc47d9f048f90f3b36fcc6f85e03d1`
-- Canonical reviewed-code CI: `31939889153` — PASS
+- Pull request: `#2 — SLICE 01: trusted text memory` — CLOSED / MERGED
+- Final branch HEAD: `47b7c6bacd5f0d74a184a61ea5ae5d7f94401c5f`
+- Merge commit: `65a3100d86b111e10e696f086ea39a448bb1c05a`
+- Validated product-code HEAD: `de8185ed1a152c12828bee02a4c8acc3398a6d7d`
+- Canonical product-code CI: `31972155005` / job `95226131010` — PASS
+- Final branch CI: `31972682881` / job `95227446058` — PASS
+- Post-merge `main` CI: `31991656625` / job `95276180583` — PASS
 - Evidence: `docs/evidence/slice-01/SLICE-01-EVIDENCE-001.md`
+- Independent audit: `docs/audits/SLICE-01-INDEPENDENT-MCF-AUDIT-001.md` — `PASS_FOR_GATE`
 - PRF: `artifacts/phases/SLICE-01-TRUSTED-TEXT-MEMORY/`
 - Open Critical findings: `0`
 - Open Important findings: `0`
+- Open review threads: `0`
+- LÉO gate: PASS
+- HUMAN_GATE: APPROVED by LEANDRO on `2026-08-17`
 
 ## Delivered scope
 
@@ -48,9 +55,24 @@ text input
 - real database-outage 503 proof;
 - smartphone-first web flows for storing and consulting synthetic memories;
 - visible provenance and explicit synthetic-only laboratory warning;
-- unit, integration, architecture and browser E2E evidence.
+- unit, integration, architecture and browser E2E evidence;
+- Prisma `P2024`/`P2037` connection-capacity failures mapped to safe service-unavailable behavior.
 
-## Explicitly not delivered
+## Review and remediation outcome
+
+MESTRE technical review found two Important issues and both were corrected. A later Codex P2 finding for Prisma pool-capacity errors was reproduced with a RED test-only commit, corrected minimally and verified by fresh GREEN CI.
+
+- RED commit: `b5199578a570ed13e49be92464e1e14d0ca2eb6c`
+- RED CI: `31972074965` / job `95225939147`
+- Fix commit: `de8185ed1a152c12828bee02a4c8acc3398a6d7d`
+- GREEN product-code CI: `31972155005` / job `95226131010`
+- Open Critical: `0`
+- Open Important: `0`
+- Open review threads: `0`
+
+Emily's independent MCF audit returned `PASS_FOR_GATE`. LÉO's internal gate passed. LEANDRO then explicitly approved integration and formal completion.
+
+## Explicitly not delivered or authorized
 
 - corrections/history;
 - offline/local-first storage;
@@ -62,20 +84,9 @@ text input
 - advanced authentication/recovery/encryption hardening;
 - backup/restore/purge;
 - controlled pilot;
-- real sensitive data.
+- real sensitive data;
+- Slice 02 implementation.
 
-## Review outcome
+## Closeout
 
-MESTRE technical review found two Important issues and both were corrected before the reviewed-code CI:
-
-1. missing visible synthetic-only laboratory warning;
-2. copy drift from the approved implementation plan.
-
-Open Critical: `0`.
-Open Important: `0`.
-
-The MESTRE review is not an independent Emily audit. Independent MCF audit remains part of the gate process and is not claimed here.
-
-## Gate rule
-
-Slice 01 is not `COMPLETE`. Green CI does not authorize merge, real data or Slice 02. The next action is the governed Slice 01 gate process; PR #2 remains open and unmerged.
+Slice 01 is complete. The completion authorizes no additional product scope beyond this boundary. The next slice requires its own definition and authorization.

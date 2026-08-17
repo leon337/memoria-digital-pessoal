@@ -2,11 +2,15 @@
 
 ## Result
 
-`IN_REVIEW / READY_FOR_GATE`
+`ENTREGUE / COMPLETE / MERGED / POST-MERGE VALIDATED`
 
 Validated product-code HEAD: `de8185ed1a152c12828bee02a4c8acc3398a6d7d`  
 Canonical product-code CI: `31972155005` / job `95226131010` — PASS  
-PR: `#2` — OPEN / NOT MERGED
+Final branch HEAD: `47b7c6bacd5f0d74a184a61ea5ae5d7f94401c5f`  
+Final branch CI: `31972682881` / job `95227446058` — PASS  
+PR #2: CLOSED / MERGED  
+Merge commit: `65a3100d86b111e10e696f086ea39a448bb1c05a`  
+Post-merge `main` CI: `31991656625` / job `95276180583` — PASS
 
 ## Delivered
 
@@ -36,10 +40,13 @@ The implementation remains laboratory-only and synthetic-data-only. No AI, embed
 - Safe database-unavailable behavior: PASS.
 - Architecture/scope invariants: PASS.
 - Synthetic-only UI warning: PASS.
+- 53/53 automated tests: PASS.
+- 2/2 browser E2E tests: PASS.
+- Post-merge full CI on `main`: PASS.
 
 ## Review findings and recovery
 
-MESTRE technical review previously fixed two Important findings:
+MESTRE technical review fixed two Important findings:
 
 1. synthetic-only restriction missing from the functional UI;
 2. web copy drift from the approved plan.
@@ -61,17 +68,21 @@ Open Critical findings: `0`.
 Open Important findings: `0`.  
 Open review threads: `0`.
 
-## Independent audit
+## Independent audit and gates
 
-Emily independent MCF audit was executed after the remediation using the approved design, authorization lineage, PR state, review thread, RED→GREEN evidence and canonical product-code CI.
+Emily independent MCF audit was executed after remediation.
 
 Audit artifact:
 `docs/audits/SLICE-01-INDEPENDENT-MCF-AUDIT-001.md`
 
 Verdict: `PASS_FOR_GATE`.
 
-This verdict is not a human approval and does not authorize merge.
+LÉO internal gate then passed. LEANDRO explicitly approved the HUMAN_GATE for merge and formal completion on `2026-08-17`.
 
-## Terminal boundary
+PR #2 was merged with full history preserved at `65a3100d86b111e10e696f086ea39a448bb1c05a`. The subsequent `main` CI `31991656625` passed every stage, including PRF manifest verification, tests, build, E2E and real PostgreSQL outage degradation.
 
-PR #2 remains open and unmerged. Real sensitive data, pilot and Slice 02 remain unauthorized. The next governed action is the internal LÉO gate followed, where required, by HUMAN_GATE directed exclusively to LEANDRO.
+## Final boundary
+
+Slice 01 is `ENTREGUE` and complete.
+
+Real sensitive data remains unauthorized. Pilot remains unauthorized. Slice 02 remains not started and unauthorized. No later-slice capability is implied by this closeout.
