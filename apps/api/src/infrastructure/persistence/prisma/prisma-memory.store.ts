@@ -171,7 +171,9 @@ export class PrismaMemoryStore implements MemoryStore {
   async create(record: TextMemoryRecord): Promise<void> {
     return this.withAvailabilityMapping(async () => {
       await this.prisma.run(async (client) => {
-        await client.$transaction((tx) => this.writer.writeEnvelope(tx, envelopeForCreate(record), null));
+        await client.$transaction((tx) =>
+          this.writer.writeEnvelope(tx, envelopeForCreate(record), null),
+        );
       });
     });
   }
