@@ -175,8 +175,7 @@ export class MemoryService {
         isOriginal: version.isOriginal,
         isCurrent: version.isCurrent,
         supersedesFactId: version.supersedesFactId,
-        predecessorFactIds:
-          version.supersedesFactId === null ? [] : [version.supersedesFactId],
+        predecessorFactIds: version.supersedesFactId === null ? [] : [version.supersedesFactId],
         eventId: version.eventId,
       })),
     };
