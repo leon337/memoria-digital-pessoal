@@ -471,7 +471,11 @@ export class IndexedDbSyncStore {
           staging.get([bootstrapToken, key]),
         );
         if (existing === undefined) {
-          staging.add({ bootstrapToken, recordKey: key, record } satisfies LocalBootstrapStagingRecord);
+          staging.add({
+            bootstrapToken,
+            recordKey: key,
+            record,
+          } satisfies LocalBootstrapStagingRecord);
           continue;
         }
         if (!sameWireRecord(existing.record, record)) {
