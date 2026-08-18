@@ -1,9 +1,14 @@
 import {
+  syncCanonicalRecordArraySchema,
   syncEventEnvelopeSchema,
+  type SyncBootstrapPageResponse,
+  type SyncBootstrapStartResponse,
+  type SyncCanonicalRecord,
   type SyncEventEnvelope,
   type SyncPullResponse,
   type SyncPushEventResult,
 } from '@mdp/contracts';
+import { createId } from '@mdp/shared';
 import type { ApiEnv } from '../../../config/env.js';
 import { SyncStoreError, type SyncStore } from '../../../sync/sync.store.js';
 import {
@@ -11,11 +16,37 @@ import {
   normalizeEnvelope,
   payloadHash,
 } from './prisma-canonical-memory.writer.js';
-import type { PrismaClient } from './generated/client.js';
+import type { Prisma, PrismaClient } from './generated/client.js';
 import { PrismaService } from './prisma.service.js';
 
 const DEFAULT_SYNC_MAX_BATCH_SIZE = 50;
 const DEFAULT_SYNC_OUTBOX_MAX_ENTRIES = 10000;
+const DEFAULT_SYNC_BOOTSTRAP_TTL_SECONDS = 900;
+
+const canonicalKindRank: Record<SyncCanonicalRecord['kind'], number> = {
+  memory: 0,
+  evidence: 1,
+  ledgerEvent: 2,
+  fact: 3,
+  factRelation: 4,
+};
+
+function canonicalRecordKey(record: SyncCanonicalRecord): string {
+  switch (record.kind) {
+    case 'memory':
+    case 'evidence':
+    case 'ledgerEvent':
+    case 'fact':
+      return record.id;
+    case 'factRelation':
+      return `${record.predecessorFactId}:${record.successorFactId}`;
+  }
+}
+
+function compareCanonicalRecords(left: SyncCanonicalRecord, right: SyncCanonicalRecord): number {
+  const rank = canonicalKindRank[left.kind] - canonicalKindRank[right.kind];
+  return rank !== 0 ? rank : canonicalRecordKey(left).localeCompare(canonicalRecordKey(right));
+}
 
 function parseCursor(value: string): bigint {
   if (!/^(0|[1-9][0-9]*)$/.test(value)) {
@@ -34,10 +65,13 @@ export class PrismaSyncStore implements SyncStore {
   private readonly prisma: PrismaService;
   private readonly writer: PrismaCanonicalMemoryWriter;
   private readonly maxBatchSize: number;
+  private readonly bootstrapTtlSeconds: number;
 
   constructor(options: PrismaSyncStoreOptions) {
     this.prisma = options.prisma;
     this.maxBatchSize = options.env?.syncMaxBatchSize ?? DEFAULT_SYNC_MAX_BATCH_SIZE;
+    this.bootstrapTtlSeconds =
+      options.env?.syncBootstrapTtlSeconds ?? DEFAULT_SYNC_BOOTSTRAP_TTL_SECONDS;
     this.writer =
       options.writer ??
       new PrismaCanonicalMemoryWriter({
@@ -138,6 +172,137 @@ export class PrismaSyncStore implements SyncStore {
         },
         { isolationLevel: 'RepeatableRead' },
       ),
+    );
+  }
+
+  async startBootstrap(clientInstanceId: string): Promise<SyncBootstrapStartResponse> {
+    void clientInstanceId;
+    return this.prisma.run((client) =>
+      client.$transaction(
+        async (tx) => {
+          const now = new Date();
+          await tx.syncBootstrapSnapshot.deleteMany({ where: { expiresAt: { lte: now } } });
+
+          const [feedState, memories, evidence, events, facts, relations] = await Promise.all([
+            tx.syncFeedState.findUnique({ where: { id: 1 } }),
+            tx.memory.findMany(),
+            tx.evidence.findMany(),
+            tx.ledgerEvent.findMany(),
+            tx.fact.findMany(),
+            tx.factRelation.findMany(),
+          ]);
+          if (!feedState) {
+            throw new SyncStoreError('SYNC_INTEGRITY_VIOLATION');
+          }
+
+          const parsed = syncCanonicalRecordArraySchema.safeParse([
+            ...memories.map((memory) => ({
+              kind: 'memory',
+              id: memory.id,
+              recordedAt: memory.recordedAt.toISOString(),
+              occurredAt: memory.occurredAt?.toISOString() ?? null,
+              temporalPrecision: memory.temporalPrecision,
+            })),
+            ...evidence.map((item) => ({
+              kind: 'evidence',
+              id: item.id,
+              memoryId: item.memoryId,
+              evidenceKind: item.kind,
+              content: item.content,
+              createdAt: item.createdAt.toISOString(),
+            })),
+            ...events.map((event) => ({
+              kind: 'ledgerEvent',
+              id: event.id,
+              memoryId: event.memoryId,
+              evidenceId: event.evidenceId,
+              factId: event.factId,
+              supersedesFactId: event.supersedesFactId,
+              eventType: event.type,
+              reason: event.reason,
+              createdAt: event.createdAt.toISOString(),
+            })),
+            ...facts.map((fact) => ({
+              kind: 'fact',
+              id: fact.id,
+              memoryId: fact.memoryId,
+              evidenceId: fact.evidenceId,
+              factKind: fact.kind,
+              content: fact.content,
+              createdAt: fact.createdAt.toISOString(),
+            })),
+            ...relations.map((relation) => ({
+              kind: 'factRelation',
+              memoryId: relation.memoryId,
+              predecessorFactId: relation.predecessorFactId,
+              successorFactId: relation.successorFactId,
+              relationType: relation.relationType,
+            })),
+          ]);
+          if (!parsed.success) {
+            throw new SyncStoreError('SYNC_INTEGRITY_VIOLATION');
+          }
+
+          const records = [...parsed.data].sort(compareCanonicalRecords);
+          const bootstrapToken = createId();
+          const expiresAt = new Date(now.getTime() + this.bootstrapTtlSeconds * 1000);
+          await tx.syncBootstrapSnapshot.create({
+            data: {
+              token: bootstrapToken,
+              highWatermark: feedState.currentSequence,
+              records: records as unknown as Prisma.InputJsonValue,
+              expiresAt,
+              createdAt: now,
+            },
+          });
+
+          return {
+            protocolVersion: 1 as const,
+            bootstrapToken,
+            highWatermarkCursor: feedState.currentSequence.toString(),
+            totalRecords: records.length,
+          };
+        },
+        { isolationLevel: 'RepeatableRead' },
+      ),
+    );
+  }
+
+  async readBootstrapPage(
+    bootstrapToken: string,
+    offset: number,
+    limit: number,
+  ): Promise<SyncBootstrapPageResponse> {
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1) {
+      throw new SyncStoreError('SYNC_INTEGRITY_VIOLATION');
+    }
+    const pageSize = Math.min(limit, this.maxBatchSize);
+
+    return this.prisma.run((client) =>
+      client.$transaction(async (tx) => {
+        const now = new Date();
+        await tx.syncBootstrapSnapshot.deleteMany({ where: { expiresAt: { lte: now } } });
+        const snapshot = await tx.syncBootstrapSnapshot.findUnique({
+          where: { token: bootstrapToken },
+        });
+        if (!snapshot || snapshot.expiresAt <= now) {
+          throw new SyncStoreError('SYNC_BOOTSTRAP_EXPIRED');
+        }
+
+        const parsed = syncCanonicalRecordArraySchema.safeParse(snapshot.records);
+        if (!parsed.success) {
+          throw new SyncStoreError('SYNC_INTEGRITY_VIOLATION');
+        }
+        const records = parsed.data.slice(offset, offset + pageSize);
+        const consumed = offset + records.length;
+
+        return {
+          protocolVersion: 1 as const,
+          bootstrapToken,
+          records,
+          nextOffset: consumed < parsed.data.length ? consumed : null,
+        };
+      }),
     );
   }
 
