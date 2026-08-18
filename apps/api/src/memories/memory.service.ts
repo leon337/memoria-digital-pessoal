@@ -6,29 +6,36 @@ import type {
   MemoryHistoryResponse,
   MemoryQueryResponse,
 } from '@mdp/contracts';
+import { CorrectionDomainError, createTextMemoryRecord } from '@mdp/domain';
 import {
-  CorrectionDomainError,
-  createTextCorrectionRecord,
-  createTextMemoryRecord,
-  type CreateTextMemoryRecordInput,
-} from '@mdp/domain';
-import type { UuidV7Generator } from '@mdp/shared';
-import { MemoryNotFoundError } from './errors/memory-not-found.error.js';
-import { MemoryUnavailableError } from './errors/memory-unavailable.error.js';
-import { NoChangeCorrectionError } from './errors/no-change-correction.error.js';
-import { StaleCorrectionError } from './errors/stale-correction.error.js';
+  MemoryNotFoundError,
+  NoChangeCorrectionError,
+  StaleCorrectionError,
+} from './memory.errors.js';
 import type { MemoryStore } from './memory.store.js';
 
-export class MemoryService {
-  constructor(
-    private readonly store: MemoryStore,
-    private readonly createId: UuidV7Generator,
-    private readonly now: () => Date,
-  ) {}
+export const MEMORY_SERVICE = Symbol('MEMORY_SERVICE');
 
-  async create(text: string): Promise<CreateMemoryResponse> {
+export interface MemoryServiceOptions {
+  store: MemoryStore;
+  now: () => Date;
+  createId: () => string;
+}
+
+export class MemoryService {
+  private readonly store: MemoryStore;
+  private readonly now: () => Date;
+  private readonly createId: () => string;
+
+  constructor(options: MemoryServiceOptions) {
+    this.store = options.store;
+    this.now = options.now;
+    this.createId = options.createId;
+  }
+
+  async register(text: string): Promise<CreateMemoryResponse> {
     const recordedAt = this.now();
-    const input: CreateTextMemoryRecordInput = {
+    const record = createTextMemoryRecord({
       text,
       recordedAt,
       ids: {
@@ -37,17 +44,9 @@ export class MemoryService {
         eventId: this.createId(),
         factId: this.createId(),
       },
-    };
-    const record = createTextMemoryRecord(input);
+    });
 
-    try {
-      await this.store.create(record);
-    } catch (error) {
-      if (error instanceof MemoryUnavailableError) {
-        throw error;
-      }
-      throw error;
-    }
+    await this.store.create(record);
 
     return {
       memory: {
@@ -64,8 +63,8 @@ export class MemoryService {
     };
   }
 
-  async get(memoryId: string): Promise<GetMemoryResponse | null> {
-    const stored = await this.store.get(memoryId);
+  async get(id: string): Promise<GetMemoryResponse | null> {
+    const stored = await this.store.getById(id);
     if (!stored) {
       return null;
     }
@@ -93,46 +92,39 @@ export class MemoryService {
   }
 
   async query(query: string): Promise<MemoryQueryResponse> {
-    const result = await this.store.query(query);
-    if (result.status === 'UNKNOWN') {
-      return {
-        status: 'UNKNOWN',
-        answer: null,
-        provenance: null,
-      };
+    const hit = await this.store.findLiteral(query.trim());
+    if (!hit) {
+      return { status: 'UNKNOWN', answer: null, provenance: null };
     }
 
     return {
       status: 'FOUND',
-      answer: result.fact.content,
+      answer: hit.content,
       provenance: {
-        memoryId: result.memoryId,
-        evidenceId: result.evidence.id,
-        factId: result.fact.id,
+        memoryId: hit.memoryId,
+        evidenceId: hit.evidenceId,
+        factId: hit.factId,
       },
     };
   }
 
   async correct(memoryId: string, request: CorrectMemoryRequest): Promise<CorrectMemoryResponse> {
     const correctedAt = this.now();
+    const ids = {
+      evidenceId: this.createId(),
+      eventId: this.createId(),
+      factId: this.createId(),
+    };
+
     let result;
     try {
       result = await this.store.correct({
         memoryId,
         expectedCurrentFactId: request.expectedCurrentFactId,
-        createRecord: (previous) =>
-          createTextCorrectionRecord({
-            memoryId,
-            previous,
-            text: request.text,
-            reason: request.reason,
-            correctedAt,
-            ids: {
-              evidenceId: this.createId(),
-              eventId: this.createId(),
-              factId: this.createId(),
-            },
-          }),
+        text: request.text,
+        ...(request.reason === undefined ? {} : { reason: request.reason }),
+        correctedAt,
+        ids,
       });
     } catch (error) {
       if (error instanceof CorrectionDomainError && error.code === 'NO_CHANGE') {
