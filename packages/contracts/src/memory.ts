@@ -2,7 +2,6 @@ import { z } from 'zod';
 import {
   correctionReasonSchema,
   memoryTextSchema,
-  MEMORY_TEXT_MAX_LENGTH,
   normalizedMemoryTextSchema,
 } from './memory-input.js';
 
