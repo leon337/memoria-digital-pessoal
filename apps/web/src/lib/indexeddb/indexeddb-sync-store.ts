@@ -11,6 +11,7 @@ import {
   openMdpLocalDatabase,
   requestAsPromise,
   transactionDone,
+  type LocalBootstrapStagingRecord,
   type LocalCurrentFactRecord,
   type LocalEvidenceRecord,
   type LocalFactRecord,
@@ -39,6 +40,8 @@ const PULL_STORES = [
   'syncConflicts',
   'syncState',
 ];
+
+const BOOTSTRAP_PROMOTION_STORES = [...PULL_STORES, 'bootstrapStaging'];
 
 function sameDate(left: Date, right: string): boolean {
   return left.toISOString() === right;
@@ -98,6 +101,59 @@ function sameCanonicalRecord(existing: unknown, record: SyncCanonicalRecord): bo
         local.relationType === record.relationType
       );
     }
+  }
+}
+
+function sameWireRecord(left: SyncCanonicalRecord, right: SyncCanonicalRecord): boolean {
+  if (left.kind !== right.kind) return false;
+  switch (left.kind) {
+    case 'memory':
+      return (
+        right.kind === 'memory' &&
+        left.id === right.id &&
+        left.recordedAt === right.recordedAt &&
+        left.occurredAt === right.occurredAt &&
+        left.temporalPrecision === right.temporalPrecision
+      );
+    case 'evidence':
+      return (
+        right.kind === 'evidence' &&
+        left.id === right.id &&
+        left.memoryId === right.memoryId &&
+        left.evidenceKind === right.evidenceKind &&
+        left.content === right.content &&
+        left.createdAt === right.createdAt
+      );
+    case 'ledgerEvent':
+      return (
+        right.kind === 'ledgerEvent' &&
+        left.id === right.id &&
+        left.memoryId === right.memoryId &&
+        left.evidenceId === right.evidenceId &&
+        left.factId === right.factId &&
+        left.supersedesFactId === right.supersedesFactId &&
+        left.eventType === right.eventType &&
+        left.reason === right.reason &&
+        left.createdAt === right.createdAt
+      );
+    case 'fact':
+      return (
+        right.kind === 'fact' &&
+        left.id === right.id &&
+        left.memoryId === right.memoryId &&
+        left.evidenceId === right.evidenceId &&
+        left.factKind === right.factKind &&
+        left.content === right.content &&
+        left.createdAt === right.createdAt
+      );
+    case 'factRelation':
+      return (
+        right.kind === 'factRelation' &&
+        left.memoryId === right.memoryId &&
+        left.predecessorFactId === right.predecessorFactId &&
+        left.successorFactId === right.successorFactId &&
+        left.relationType === right.relationType
+      );
   }
 }
 
@@ -168,6 +224,13 @@ function recordKey(record: SyncCanonicalRecord): IDBValidKey {
     return [record.predecessorFactId, record.successorFactId];
   }
   return record.id;
+}
+
+function bootstrapRecordKey(record: SyncCanonicalRecord): string {
+  if (record.kind === 'factRelation') {
+    return `factRelation:${record.predecessorFactId}:${record.successorFactId}`;
+  }
+  return `${record.kind}:${record.id}`;
 }
 
 async function applyRecordImmutable(
@@ -382,6 +445,82 @@ export class IndexedDbSyncStore {
         key: 'confirmedCursor',
         value: page.nextCursor,
       } satisfies LocalSyncStateRecord);
+      await done;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // Transaction may already be aborted by IndexedDB.
+      }
+      await done.catch(() => undefined);
+      if (error instanceof MemoryRepositoryError) throw error;
+      throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR', error);
+    }
+  }
+
+  async stageBootstrapPage(bootstrapToken: string, records: SyncCanonicalRecord[]): Promise<void> {
+    const db = await this.database();
+    const transaction = db.transaction('bootstrapStaging', 'readwrite');
+    const done = transactionDone(transaction);
+    const staging = transaction.objectStore('bootstrapStaging');
+
+    try {
+      for (const record of records) {
+        const key = bootstrapRecordKey(record);
+        const existing = await requestAsPromise<LocalBootstrapStagingRecord | undefined>(
+          staging.get([bootstrapToken, key]),
+        );
+        if (existing === undefined) {
+          staging.add({ bootstrapToken, recordKey: key, record } satisfies LocalBootstrapStagingRecord);
+          continue;
+        }
+        if (!sameWireRecord(existing.record, record)) {
+          throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
+        }
+      }
+      await done;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // Transaction may already be aborted by IndexedDB.
+      }
+      await done.catch(() => undefined);
+      if (error instanceof MemoryRepositoryError) throw error;
+      throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR', error);
+    }
+  }
+
+  async promoteBootstrap(bootstrapToken: string, watermark: string): Promise<void> {
+    const parsedWatermark = syncCursorSchema.safeParse(watermark);
+    if (!parsedWatermark.success) throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
+
+    const db = await this.database();
+    const transaction = db.transaction(BOOTSTRAP_PROMOTION_STORES, 'readwrite');
+    const done = transactionDone(transaction);
+
+    try {
+      const staging = transaction.objectStore('bootstrapStaging');
+      const [rows, keys] = await Promise.all([
+        requestAsPromise<LocalBootstrapStagingRecord[]>(
+          staging.index('bootstrapToken').getAll(bootstrapToken),
+        ),
+        requestAsPromise<IDBValidKey[]>(staging.index('bootstrapToken').getAllKeys(bootstrapToken)),
+      ]);
+      const touchedMemoryIds = new Set<string>();
+      for (const row of rows) {
+        if (row.record.kind !== 'memory') touchedMemoryIds.add(row.record.memoryId);
+        else touchedMemoryIds.add(row.record.id);
+        await applyRecordImmutable(transaction, row.record);
+      }
+      for (const memoryId of touchedMemoryIds) {
+        await reprojectMemory(transaction, memoryId);
+      }
+      transaction.objectStore('syncState').put({
+        key: 'confirmedCursor',
+        value: parsedWatermark.data,
+      } satisfies LocalSyncStateRecord);
+      for (const key of keys) staging.delete(key);
       await done;
     } catch (error) {
       try {
