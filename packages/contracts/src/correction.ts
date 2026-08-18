@@ -1,19 +1,16 @@
 import { z } from 'zod';
-import { MEMORY_TEXT_MAX_LENGTH } from './memory.js';
+import {
+  correctionReasonSchema,
+  CORRECTION_REASON_MAX_LENGTH,
+  normalizedMemoryTextSchema,
+} from './memory-input.js';
 
-export const CORRECTION_REASON_MAX_LENGTH = 500;
+export { CORRECTION_REASON_MAX_LENGTH, correctionReasonSchema } from './memory-input.js';
 
 export const correctMemoryRequestSchema = z.object({
-  text: z
-    .string()
-    .transform((value) => value.trim())
-    .pipe(z.string().min(1).max(MEMORY_TEXT_MAX_LENGTH)),
+  text: normalizedMemoryTextSchema,
   expectedCurrentFactId: z.string().min(1),
-  reason: z
-    .string()
-    .transform((value) => value.trim())
-    .pipe(z.string().max(CORRECTION_REASON_MAX_LENGTH))
-    .optional(),
+  reason: correctionReasonSchema.optional(),
 });
 
 export const correctMemoryResponseSchema = z.object({
@@ -41,6 +38,7 @@ export const memoryHistoryVersionSchema = z.object({
   isOriginal: z.boolean(),
   isCurrent: z.boolean(),
   supersedesFactId: z.string().nullable(),
+  predecessorFactIds: z.array(z.string()),
   eventId: z.string(),
 });
 
