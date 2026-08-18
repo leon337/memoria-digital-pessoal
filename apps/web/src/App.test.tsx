@@ -16,6 +16,7 @@ function repository(ready: () => Promise<void> = () => Promise.resolve()): Memor
     create: vi.fn(),
     query: vi.fn(),
     correct: vi.fn(),
+    resolveConflict: vi.fn(),
     history: vi.fn(),
   };
 }
