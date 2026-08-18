@@ -97,9 +97,9 @@ describe('SyncService', () => {
 
   it('blocks push and pull requests above the configured batch size', async () => {
     const events = Array.from({ length: 51 }, () => createEnvelope());
-    await expect(
-      service.push({ protocolVersion: 1, clientInstanceId, events }),
-    ).rejects.toEqual(expect.objectContaining<Partial<SyncServiceError>>({ code: 'SYNC_BLOCKED' }));
+    await expect(service.push({ protocolVersion: 1, clientInstanceId, events })).rejects.toEqual(
+      expect.objectContaining<Partial<SyncServiceError>>({ code: 'SYNC_BLOCKED' }),
+    );
     await expect(service.pull({ after: '0', limit: '51' })).rejects.toMatchObject({
       code: 'SYNC_BLOCKED',
     });
