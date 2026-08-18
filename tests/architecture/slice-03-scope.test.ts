@@ -52,11 +52,12 @@ describe('Slice 03 scope invariants', () => {
     expect(await exists('apps/web/src/lib/memory-api.ts')).toBe(true);
   });
 
-  it('freezes the local database identity and five-store versioned migration boundary', async () => {
+  it('preserves the local database identity and five canonical Slice 03 stores across later migrations', async () => {
     const db = await text('apps/web/src/lib/indexeddb/mdp-local-db.ts');
+    const version = db.match(/MDP_LOCAL_DB_VERSION = (\d+)/)?.[1];
 
     expect(db).toContain("MDP_LOCAL_DB_NAME = 'mdp-local'");
-    expect(db).toContain('MDP_LOCAL_DB_VERSION = 2');
+    expect(Number(version)).toBeGreaterThanOrEqual(2);
     for (const store of ['memories', 'evidence', 'ledgerEvents', 'facts', 'currentFacts']) {
       expect(db).toContain(`'${store}'`);
     }
