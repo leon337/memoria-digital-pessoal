@@ -1,5 +1,7 @@
+import type { SyncCanonicalRecord, SyncEventEnvelope } from '@mdp/contracts';
+
 export const MDP_LOCAL_DB_NAME = 'mdp-local';
-export const MDP_LOCAL_DB_VERSION = 2;
+export const MDP_LOCAL_DB_VERSION = 3;
 export const PRODUCT_STORES = [
   'memories',
   'evidence',
@@ -7,8 +9,16 @@ export const PRODUCT_STORES = [
   'facts',
   'currentFacts',
 ] as const;
+export const SYNC_STORES = [
+  'factRelations',
+  'syncOutbox',
+  'syncState',
+  'syncConflicts',
+  'bootstrapStaging',
+] as const;
 
 export type ProductStoreName = (typeof PRODUCT_STORES)[number];
+export type SyncStoreName = (typeof SYNC_STORES)[number];
 
 export interface LocalMemoryRecord {
   id: string;
@@ -54,6 +64,43 @@ export interface LocalCurrentFactRecord {
   recordedAt: Date;
 }
 
+export interface LocalFactRelationRecord {
+  memoryId: string;
+  predecessorFactId: string;
+  successorFactId: string;
+  relationType: 'SUPERSEDES';
+}
+
+export interface LocalSyncOutboxRecord {
+  eventId: string;
+  memoryId: string;
+  envelope: SyncEventEnvelope;
+  status: 'PENDING' | 'RETRY_WAIT' | 'BLOCKED';
+  attempt: number;
+  nextAttemptAt: Date | null;
+  lastErrorCode: string | null;
+}
+
+export interface LocalSyncStateRecord {
+  key: 'clientInstanceId' | 'confirmedCursor' | 'bootstrap';
+  value: unknown;
+}
+
+export interface LocalSyncConflictRecord {
+  memoryId: string;
+  baselineFactId: string;
+  candidateFactIds: string[];
+  status: 'OPEN' | 'RESOLVED';
+  resolutionFactId: string | null;
+  updatedAt: Date;
+}
+
+export interface LocalBootstrapStagingRecord {
+  bootstrapToken: string;
+  recordKey: string;
+  record: SyncCanonicalRecord;
+}
+
 function upgradeToV1(db: IDBDatabase): void {
   db.createObjectStore('memories', { keyPath: 'id' });
   db.createObjectStore('evidence', { keyPath: 'id' });
@@ -74,6 +121,52 @@ function upgradeToV2(transaction: IDBTransaction): void {
   transaction.objectStore('currentFacts').createIndex('memoryId', 'memoryId');
 }
 
+function upgradeToV3(db: IDBDatabase, transaction: IDBTransaction): void {
+  const facts = transaction.objectStore('facts');
+  if (facts.indexNames.contains('supersedesFactId')) {
+    facts.deleteIndex('supersedesFactId');
+  }
+
+  const relations = db.createObjectStore('factRelations', {
+    keyPath: ['predecessorFactId', 'successorFactId'],
+  });
+  relations.createIndex('memoryId', 'memoryId');
+  relations.createIndex('predecessorFactId', 'predecessorFactId');
+  relations.createIndex('successorFactId', 'successorFactId');
+
+  const outbox = db.createObjectStore('syncOutbox', { keyPath: 'eventId' });
+  outbox.createIndex('memoryId', 'memoryId');
+  outbox.createIndex('status', 'status');
+  outbox.createIndex('nextAttemptAt', 'nextAttemptAt');
+
+  db.createObjectStore('syncState', { keyPath: 'key' });
+
+  const conflicts = db.createObjectStore('syncConflicts', { keyPath: 'memoryId' });
+  conflicts.createIndex('status', 'status');
+
+  const staging = db.createObjectStore('bootstrapStaging', {
+    keyPath: ['bootstrapToken', 'recordKey'],
+  });
+  staging.createIndex('bootstrapToken', 'bootstrapToken');
+
+  facts.openCursor().onsuccess = (event) => {
+    const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
+    if (!cursor) {
+      return;
+    }
+    const fact = cursor.value as LocalFactRecord;
+    if (fact.supersedesFactId) {
+      relations.add({
+        memoryId: fact.memoryId,
+        predecessorFactId: fact.supersedesFactId,
+        successorFactId: fact.id,
+        relationType: 'SUPERSEDES',
+      } satisfies LocalFactRelationRecord);
+    }
+    cursor.continue();
+  };
+}
+
 export function applyMdpLocalUpgrade(
   db: IDBDatabase,
   transaction: IDBTransaction,
@@ -85,6 +178,9 @@ export function applyMdpLocalUpgrade(
   }
   if (oldVersion < 2 && targetVersion >= 2) {
     upgradeToV2(transaction);
+  }
+  if (oldVersion < 3 && targetVersion >= 3) {
+    upgradeToV3(db, transaction);
   }
 }
 
