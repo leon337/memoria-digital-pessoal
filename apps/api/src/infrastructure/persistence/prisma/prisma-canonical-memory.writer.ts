@@ -85,13 +85,19 @@ function integrityViolation(): never {
 
 export interface PrismaCanonicalMemoryWriterOptions {
   now?: () => Date;
+  maxOutboxEntries?: number;
 }
 
 export class PrismaCanonicalMemoryWriter {
   private readonly now: () => Date;
+  private readonly maxOutboxEntries: number;
 
   constructor(options: PrismaCanonicalMemoryWriterOptions = {}) {
     this.now = options.now ?? (() => new Date());
+    this.maxOutboxEntries = options.maxOutboxEntries ?? 10000;
+    if (!Number.isSafeInteger(this.maxOutboxEntries) || this.maxOutboxEntries < 1) {
+      throw new Error('SYNC_OUTBOX_MAX_ENTRIES_INVALID');
+    }
   }
 
   async writeEnvelope(
@@ -120,6 +126,13 @@ export class PrismaCanonicalMemoryWriter {
         createdAt: this.now(),
       },
     });
+
+    const retentionThreshold = sequence - BigInt(this.maxOutboxEntries);
+    if (retentionThreshold >= 1n) {
+      await tx.syncOutbox.deleteMany({
+        where: { sequence: { lte: retentionThreshold } },
+      });
+    }
 
     return projection;
   }
