@@ -117,9 +117,9 @@ describe('synchronization protocol contracts', () => {
     for (const outcome of outcomes) {
       expect(syncPushEventResultSchema.parse(outcome)).toEqual(outcome);
     }
-    expect(syncPushResponseSchema.parse({ protocolVersion: 1, results: outcomes }).results).toHaveLength(
-      outcomes.length,
-    );
+    expect(
+      syncPushResponseSchema.parse({ protocolVersion: 1, results: outcomes }).results,
+    ).toHaveLength(outcomes.length);
   });
 
   it('validates ordered pull pages with decimal-string cursors', () => {
