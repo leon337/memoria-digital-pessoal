@@ -47,12 +47,7 @@ interface IndexedDbMemoryRepositoryDependencies {
 
 type FailureFallback = 'LOCAL_STORAGE_UNAVAILABLE' | 'LOCAL_DATA_INTEGRITY_ERROR';
 
-const MEMORY_WRITE_STORES = [
-  ...PRODUCT_STORES,
-  'factRelations',
-  'syncOutbox',
-  'syncConflicts',
-];
+const MEMORY_WRITE_STORES = [...PRODUCT_STORES, 'factRelations', 'syncOutbox', 'syncConflicts'];
 
 const unavailableErrorNames = new Set([
   'QuotaExceededError',
@@ -131,9 +126,7 @@ function pendingOutbox(envelope: SyncEventEnvelope): LocalSyncOutboxRecord {
   };
 }
 
-function creationEnvelope(
-  record: ReturnType<typeof createTextMemoryRecord>,
-): SyncEventEnvelope {
+function creationEnvelope(record: ReturnType<typeof createTextMemoryRecord>): SyncEventEnvelope {
   return {
     protocolVersion: SYNC_PROTOCOL_VERSION,
     eventId: record.event.id,
@@ -638,7 +631,10 @@ export class IndexedDbMemoryRepository implements MemoryRepository {
           },
         });
       } catch (error) {
-        if (error instanceof ConflictResolutionDomainError || error instanceof CorrectionDomainError) {
+        if (
+          error instanceof ConflictResolutionDomainError ||
+          error instanceof CorrectionDomainError
+        ) {
           throw new MemoryRepositoryError('VALIDATION_FAILED', error);
         }
         throw error;
@@ -734,15 +730,17 @@ export class IndexedDbMemoryRepository implements MemoryRepository {
         .getAll(memoryId);
       const conflictRequest = transaction.objectStore('syncConflicts').get(memoryId);
 
-      const [memory, evidence, events, facts, currentRows, relations, conflict] = await Promise.all([
-        requestAsPromise<LocalMemoryRecord | undefined>(memoryRequest),
-        requestAsPromise<LocalEvidenceRecord[]>(evidenceRequest),
-        requestAsPromise<LocalLedgerEventRecord[]>(eventsRequest),
-        requestAsPromise<LocalFactRecord[]>(factsRequest),
-        requestAsPromise<LocalCurrentFactRecord[]>(currentRequest),
-        requestAsPromise<LocalFactRelationRecord[]>(relationsRequest),
-        requestAsPromise<LocalSyncConflictRecord | undefined>(conflictRequest),
-      ]);
+      const [memory, evidence, events, facts, currentRows, relations, conflict] = await Promise.all(
+        [
+          requestAsPromise<LocalMemoryRecord | undefined>(memoryRequest),
+          requestAsPromise<LocalEvidenceRecord[]>(evidenceRequest),
+          requestAsPromise<LocalLedgerEventRecord[]>(eventsRequest),
+          requestAsPromise<LocalFactRecord[]>(factsRequest),
+          requestAsPromise<LocalCurrentFactRecord[]>(currentRequest),
+          requestAsPromise<LocalFactRelationRecord[]>(relationsRequest),
+          requestAsPromise<LocalSyncConflictRecord | undefined>(conflictRequest),
+        ],
+      );
       await done;
 
       if (
@@ -819,7 +817,8 @@ export class IndexedDbMemoryRepository implements MemoryRepository {
         if (!fact) {
           throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
         }
-        const isCurrent = projection.status === 'RESOLVED' && node.factId === projection.currentFactId;
+        const isCurrent =
+          projection.status === 'RESOLVED' && node.factId === projection.currentFactId;
 
         if (node.predecessorFactIds.length === 0) {
           const creationEvents = events.filter(
