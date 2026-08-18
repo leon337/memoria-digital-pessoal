@@ -115,7 +115,10 @@ describe('IndexedDbSyncStore identity and push acknowledgements', () => {
     await seedOutbox(factory);
     const store = new IndexedDbSyncStore({ factory });
 
-    await store.applyPushResults([{ eventId, status: 'CONFLICT' }], new Date('2026-08-18T09:01:00.000Z'));
+    await store.applyPushResults(
+      [{ eventId, status: 'CONFLICT' }],
+      new Date('2026-08-18T09:01:00.000Z'),
+    );
 
     await expect(pending(factory)).resolves.toBeUndefined();
     await expect(store.getMemoryStatus(memoryId)).resolves.toBe('CONFLICT');
