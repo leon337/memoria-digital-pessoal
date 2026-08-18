@@ -59,8 +59,10 @@ function buildAndValidateGraph(
 
   const nodes = new Map<string, FactGraphNode>();
   for (const node of graphNodes) {
-    if (!node.factId || nodes.has(node.factId)) brokenGraph('fact graph contains an invalid fact id');
-    if (Number.isNaN(node.createdAt.getTime())) brokenGraph('fact graph contains an invalid timestamp');
+    if (!node.factId || nodes.has(node.factId))
+      brokenGraph('fact graph contains an invalid fact id');
+    if (Number.isNaN(node.createdAt.getTime()))
+      brokenGraph('fact graph contains an invalid timestamp');
     nodes.set(node.factId, node);
   }
 
