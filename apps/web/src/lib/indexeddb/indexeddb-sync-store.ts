@@ -1,10 +1,22 @@
-import type { SyncPushEventResult } from '@mdp/contracts';
+import {
+  syncCursorSchema,
+  type SyncCanonicalRecord,
+  type SyncPullResponse,
+  type SyncPushEventResult,
+} from '@mdp/contracts';
+import { FactGraphDomainError, deriveMemoryProjection } from '@mdp/domain';
 import { createId } from '@mdp/shared';
 import { MemoryRepositoryError } from '../memory-repository.js';
 import {
   openMdpLocalDatabase,
   requestAsPromise,
   transactionDone,
+  type LocalCurrentFactRecord,
+  type LocalEvidenceRecord,
+  type LocalFactRecord,
+  type LocalFactRelationRecord,
+  type LocalLedgerEventRecord,
+  type LocalMemoryRecord,
   type LocalSyncConflictRecord,
   type LocalSyncOutboxRecord,
   type LocalSyncStateRecord,
@@ -15,6 +27,243 @@ export type LocalMemorySyncStatus = 'SYNCED' | 'PENDING' | 'BLOCKED' | 'CONFLICT
 interface IndexedDbSyncStoreDependencies {
   factory?: IDBFactory;
   createId?: () => string;
+}
+
+const PULL_STORES = [
+  'memories',
+  'evidence',
+  'ledgerEvents',
+  'facts',
+  'factRelations',
+  'currentFacts',
+  'syncConflicts',
+  'syncState',
+];
+
+function sameDate(left: Date, right: string): boolean {
+  return left.toISOString() === right;
+}
+
+function sameCanonicalRecord(existing: unknown, record: SyncCanonicalRecord): boolean {
+  switch (record.kind) {
+    case 'memory': {
+      const local = existing as LocalMemoryRecord;
+      return (
+        local.id === record.id &&
+        sameDate(local.recordedAt, record.recordedAt) &&
+        local.occurredAt === record.occurredAt &&
+        local.temporalPrecision === record.temporalPrecision
+      );
+    }
+    case 'evidence': {
+      const local = existing as LocalEvidenceRecord;
+      return (
+        local.id === record.id &&
+        local.memoryId === record.memoryId &&
+        local.kind === record.evidenceKind &&
+        local.content === record.content &&
+        sameDate(local.createdAt, record.createdAt)
+      );
+    }
+    case 'ledgerEvent': {
+      const local = existing as LocalLedgerEventRecord;
+      return (
+        local.id === record.id &&
+        local.memoryId === record.memoryId &&
+        local.evidenceId === record.evidenceId &&
+        (local.factId ?? null) === record.factId &&
+        (local.supersedesFactId ?? null) === record.supersedesFactId &&
+        local.type === record.eventType &&
+        (local.reason ?? null) === record.reason &&
+        sameDate(local.createdAt, record.createdAt)
+      );
+    }
+    case 'fact': {
+      const local = existing as LocalFactRecord;
+      return (
+        local.id === record.id &&
+        local.memoryId === record.memoryId &&
+        local.evidenceId === record.evidenceId &&
+        local.kind === record.factKind &&
+        local.content === record.content &&
+        sameDate(local.createdAt, record.createdAt)
+      );
+    }
+    case 'factRelation': {
+      const local = existing as LocalFactRelationRecord;
+      return (
+        local.memoryId === record.memoryId &&
+        local.predecessorFactId === record.predecessorFactId &&
+        local.successorFactId === record.successorFactId &&
+        local.relationType === record.relationType
+      );
+    }
+  }
+}
+
+function toLocalRecord(record: SyncCanonicalRecord): object {
+  switch (record.kind) {
+    case 'memory':
+      return {
+        id: record.id,
+        recordedAt: new Date(record.recordedAt),
+        occurredAt: record.occurredAt,
+        temporalPrecision: record.temporalPrecision,
+      } satisfies LocalMemoryRecord;
+    case 'evidence':
+      return {
+        id: record.id,
+        memoryId: record.memoryId,
+        kind: record.evidenceKind,
+        content: record.content,
+        createdAt: new Date(record.createdAt),
+      } satisfies LocalEvidenceRecord;
+    case 'ledgerEvent':
+      return {
+        id: record.id,
+        memoryId: record.memoryId,
+        evidenceId: record.evidenceId,
+        ...(record.factId === null ? {} : { factId: record.factId }),
+        ...(record.supersedesFactId === null
+          ? {}
+          : { supersedesFactId: record.supersedesFactId }),
+        type: record.eventType,
+        reason: record.reason,
+        createdAt: new Date(record.createdAt),
+      } satisfies LocalLedgerEventRecord;
+    case 'fact':
+      return {
+        id: record.id,
+        memoryId: record.memoryId,
+        evidenceId: record.evidenceId,
+        kind: record.factKind,
+        content: record.content,
+        createdAt: new Date(record.createdAt),
+      } satisfies LocalFactRecord;
+    case 'factRelation':
+      return {
+        memoryId: record.memoryId,
+        predecessorFactId: record.predecessorFactId,
+        successorFactId: record.successorFactId,
+        relationType: record.relationType,
+      } satisfies LocalFactRelationRecord;
+  }
+}
+
+function recordStore(record: SyncCanonicalRecord): string {
+  switch (record.kind) {
+    case 'memory':
+      return 'memories';
+    case 'evidence':
+      return 'evidence';
+    case 'ledgerEvent':
+      return 'ledgerEvents';
+    case 'fact':
+      return 'facts';
+    case 'factRelation':
+      return 'factRelations';
+  }
+}
+
+function recordKey(record: SyncCanonicalRecord): IDBValidKey {
+  if (record.kind === 'factRelation') {
+    return [record.predecessorFactId, record.successorFactId];
+  }
+  return record.id;
+}
+
+async function applyRecordImmutable(
+  transaction: IDBTransaction,
+  record: SyncCanonicalRecord,
+): Promise<void> {
+  const store = transaction.objectStore(recordStore(record));
+  const existing = await requestAsPromise<unknown>(store.get(recordKey(record)));
+  if (existing === undefined) {
+    store.add(toLocalRecord(record));
+    return;
+  }
+  if (!sameCanonicalRecord(existing, record)) {
+    throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
+  }
+}
+
+function latestFactDate(facts: LocalFactRecord[]): Date {
+  return new Date(Math.max(...facts.map((fact) => fact.createdAt.getTime())));
+}
+
+async function reprojectMemory(transaction: IDBTransaction, memoryId: string): Promise<void> {
+  const facts = await requestAsPromise<LocalFactRecord[]>(
+    transaction.objectStore('facts').index('memoryId').getAll(memoryId),
+  );
+  const relations = await requestAsPromise<LocalFactRelationRecord[]>(
+    transaction.objectStore('factRelations').index('memoryId').getAll(memoryId),
+  );
+  const memory = await requestAsPromise<LocalMemoryRecord | undefined>(
+    transaction.objectStore('memories').get(memoryId),
+  );
+  if (!memory || facts.length === 0) {
+    throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
+  }
+
+  let projection: ReturnType<typeof deriveMemoryProjection>;
+  try {
+    projection = deriveMemoryProjection(
+      facts.map((fact) => ({ factId: fact.id, createdAt: fact.createdAt })),
+      relations,
+    );
+  } catch (error) {
+    if (error instanceof FactGraphDomainError) {
+      throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR', error);
+    }
+    throw error;
+  }
+
+  const currentFacts = transaction.objectStore('currentFacts');
+  const existingCurrentKeys = await requestAsPromise<IDBValidKey[]>(
+    currentFacts.index('memoryId').getAllKeys(memoryId),
+  );
+  for (const key of existingCurrentKeys) currentFacts.delete(key);
+
+  const conflicts = transaction.objectStore('syncConflicts');
+  const existingConflict = await requestAsPromise<LocalSyncConflictRecord | undefined>(
+    conflicts.get(memoryId),
+  );
+
+  if (projection.status === 'RESOLVED') {
+    const current = facts.find((fact) => fact.id === projection.currentFactId);
+    if (!current) throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
+    currentFacts.put({
+      factId: current.id,
+      memoryId,
+      evidenceId: current.evidenceId,
+      content: current.content,
+      recordedAt: memory.recordedAt,
+    } satisfies LocalCurrentFactRecord);
+    if (existingConflict) {
+      conflicts.put({
+        ...existingConflict,
+        status: 'RESOLVED',
+        resolutionFactId: current.id,
+        updatedAt: current.createdAt,
+      } satisfies LocalSyncConflictRecord);
+    }
+    return;
+  }
+
+  const candidateFacts = projection.candidateFactIds.map((candidateId) =>
+    facts.find((fact) => fact.id === candidateId),
+  );
+  if (candidateFacts.some((fact) => fact === undefined)) {
+    throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
+  }
+  conflicts.put({
+    memoryId,
+    baselineFactId: projection.baselineFactId,
+    candidateFactIds: projection.candidateFactIds,
+    status: 'OPEN',
+    resolutionFactId: null,
+    updatedAt: latestFactDate(candidateFacts as LocalFactRecord[]),
+  } satisfies LocalSyncConflictRecord);
 }
 
 export class IndexedDbSyncStore {
@@ -55,6 +304,20 @@ export class IndexedDbSyncStore {
     store.add({ key: 'clientInstanceId', value: id } satisfies LocalSyncStateRecord);
     await done;
     return id;
+  }
+
+  async getConfirmedCursor(): Promise<string | null> {
+    const db = await this.database();
+    const transaction = db.transaction('syncState', 'readonly');
+    const done = transactionDone(transaction);
+    const row = await requestAsPromise<LocalSyncStateRecord | undefined>(
+      transaction.objectStore('syncState').get('confirmedCursor'),
+    );
+    await done;
+    if (row === undefined) return null;
+    const parsed = syncCursorSchema.safeParse(row.value);
+    if (!parsed.success) throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
+    return parsed.data;
   }
 
   async applyPushResults(results: SyncPushEventResult[], now: Date): Promise<void> {
@@ -99,6 +362,39 @@ export class IndexedDbSyncStore {
     }
 
     await done;
+  }
+
+  async applyPullPage(page: SyncPullResponse): Promise<void> {
+    const db = await this.database();
+    const transaction = db.transaction(PULL_STORES, 'readwrite');
+    const done = transactionDone(transaction);
+
+    try {
+      const touchedMemoryIds = new Set<string>();
+      for (const event of page.events) {
+        touchedMemoryIds.add(event.envelope.memoryId);
+        for (const record of event.envelope.records) {
+          await applyRecordImmutable(transaction, record);
+        }
+      }
+      for (const memoryId of touchedMemoryIds) {
+        await reprojectMemory(transaction, memoryId);
+      }
+      transaction.objectStore('syncState').put({
+        key: 'confirmedCursor',
+        value: page.nextCursor,
+      } satisfies LocalSyncStateRecord);
+      await done;
+    } catch (error) {
+      try {
+        transaction.abort();
+      } catch {
+        // Transaction may already be aborted by IndexedDB.
+      }
+      await done.catch(() => undefined);
+      if (error instanceof MemoryRepositoryError) throw error;
+      throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR', error);
+    }
   }
 
   async getMemoryStatus(memoryId: string): Promise<LocalMemorySyncStatus> {
