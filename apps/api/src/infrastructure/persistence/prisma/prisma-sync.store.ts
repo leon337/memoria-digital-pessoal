@@ -49,10 +49,10 @@ export class PrismaSyncStore implements SyncStore {
       const projection = await client.$transaction((tx) =>
         this.writer.writeEnvelope(tx, normalized, clientInstanceId),
       );
-      return {
-        eventId: normalized.eventId,
-        status: projection.status === 'CONFLICT' ? ('CONFLICT' as const) : ('APPLIED' as const),
-      };
+      if (projection.status === 'CONFLICT') {
+        return { eventId: normalized.eventId, status: 'CONFLICT' as const };
+      }
+      return { eventId: normalized.eventId, status: 'APPLIED' as const };
     });
   }
 
