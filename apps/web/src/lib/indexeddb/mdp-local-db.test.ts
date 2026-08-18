@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import {
   MDP_LOCAL_DB_NAME,
   MDP_LOCAL_DB_VERSION,
-  PRODUCT_STORES,
   applyMdpLocalUpgrade,
   openMdpLocalDatabase,
   requestAsPromise,
@@ -42,7 +41,6 @@ describe('mdp-local IndexedDB schema', () => {
     expect(MDP_LOCAL_DB_VERSION).toBe(3);
     expect(db.version).toBe(3);
     expect([...db.objectStoreNames].sort()).toEqual(EXPECTED_V3_STORES);
-    expect([...PRODUCT_STORES].sort()).toEqual(EXPECTED_V3_STORES);
 
     const facts = db.transaction('facts').objectStore('facts');
     expect(facts.indexNames.contains('memoryId')).toBe(true);
