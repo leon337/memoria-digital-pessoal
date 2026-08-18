@@ -29,6 +29,7 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vitest run packages/contracts/src packages/domain/src
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm format:check
+      - run: pnpm build:packages
+      - run: pnpm -r --filter './packages/*' --if-present typecheck
+      - run: pnpm exec eslint packages/contracts/src packages/domain/src
+      - run: pnpm exec prettier packages/contracts/src packages/domain/src --check
