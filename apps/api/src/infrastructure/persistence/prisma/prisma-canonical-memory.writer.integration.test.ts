@@ -166,12 +166,8 @@ describe('PrismaCanonicalMemoryWriter integration', () => {
     );
 
     await Promise.all([
-      service.run((client) =>
-        client.$transaction((tx) => writer.writeEnvelope(tx, first, null)),
-      ),
-      service.run((client) =>
-        client.$transaction((tx) => writer.writeEnvelope(tx, second, null)),
-      ),
+      service.run((client) => client.$transaction((tx) => writer.writeEnvelope(tx, first, null))),
+      service.run((client) => client.$transaction((tx) => writer.writeEnvelope(tx, second, null))),
     ]);
 
     await service.run(async (client) => {
