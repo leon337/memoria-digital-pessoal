@@ -171,7 +171,9 @@ describe('IndexedDbMemoryRepository Slice 04 synchronization writes', () => {
     ).rejects.toMatchObject({ code: 'LOCAL_DATA_INTEGRITY_ERROR' });
 
     await expect(repository.history(root.memoryId)).resolves.toEqual(historyBefore);
-    await expect(readAll<LocalFactRelationRecord>(factory, 'factRelations')).resolves.toHaveLength(0);
+    await expect(readAll<LocalFactRelationRecord>(factory, 'factRelations')).resolves.toHaveLength(
+      0,
+    );
   });
 
   it('exposes an open causal conflict and resolves the exact candidate set append-only', async () => {
