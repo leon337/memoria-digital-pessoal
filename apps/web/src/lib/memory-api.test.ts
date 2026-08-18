@@ -138,6 +138,7 @@ describe('memory API client', () => {
             isOriginal: true,
             isCurrent: true,
             supersedesFactId: null,
+            predecessorFactIds: [],
             eventId: 'ev1',
           },
         ],
