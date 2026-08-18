@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  Inject,
-  Param,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query } from '@nestjs/common';
 import { CodedHttpException } from '../common/http/api-error.js';
 import { SYNC_SERVICE, SyncService, SyncServiceError } from './sync.service.js';
 import { SyncStoreError } from './sync.store.js';
@@ -46,7 +37,11 @@ export class SyncController {
         error instanceof SyncServiceError || error instanceof SyncStoreError ? error.code : null;
       switch (code) {
         case 'VALIDATION_FAILED':
-          throw new CodedHttpException('VALIDATION_FAILED', 400, 'Os dados enviados são inválidos.');
+          throw new CodedHttpException(
+            'VALIDATION_FAILED',
+            400,
+            'Os dados enviados são inválidos.',
+          );
         case 'SYNC_PROTOCOL_UNSUPPORTED':
           throw new CodedHttpException(
             'SYNC_PROTOCOL_UNSUPPORTED',
