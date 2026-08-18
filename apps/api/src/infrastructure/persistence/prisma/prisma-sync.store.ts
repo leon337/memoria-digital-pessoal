@@ -1,6 +1,10 @@
 import type { SyncEventEnvelope, SyncPushEventResult } from '@mdp/contracts';
 import type { SyncStore } from '../../../sync/sync.store.js';
-import { PrismaCanonicalMemoryWriter, normalizeEnvelope, payloadHash } from './prisma-canonical-memory.writer.js';
+import {
+  PrismaCanonicalMemoryWriter,
+  normalizeEnvelope,
+  payloadHash,
+} from './prisma-canonical-memory.writer.js';
 import type { PrismaClient } from './generated/client.js';
 import { PrismaService } from './prisma.service.js';
 
@@ -26,7 +30,9 @@ export class PrismaSyncStore implements SyncStore {
     const hash = payloadHash(normalized);
 
     return this.prisma.run(async (client) => {
-      const existing = await client.syncOutbox.findUnique({ where: { eventId: normalized.eventId } });
+      const existing = await client.syncOutbox.findUnique({
+        where: { eventId: normalized.eventId },
+      });
       if (existing) {
         return existing.payloadHash === hash
           ? { eventId: normalized.eventId, status: 'ALREADY_APPLIED' as const }
@@ -61,9 +67,7 @@ export class PrismaSyncStore implements SyncStore {
     envelope: SyncEventEnvelope,
   ): Promise<string[]> {
     const includedFactIds = new Set(
-      envelope.records
-        .filter((record) => record.kind === 'fact')
-        .map((record) => record.id),
+      envelope.records.filter((record) => record.kind === 'fact').map((record) => record.id),
     );
     const candidates = envelope.predecessorFactIds.filter((id) => !includedFactIds.has(id));
     if (candidates.length === 0) {
