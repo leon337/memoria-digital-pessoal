@@ -499,7 +499,9 @@ describe('PrismaSyncStore integration', () => {
       'ledgerEvent',
       'fact',
     ]);
-    expect(records.some((record) => 'id' in record && record.id === standaloneIds.historical.memoryId)).toBe(true);
+    expect(
+      records.some((record) => 'id' in record && record.id === standaloneIds.historical.memoryId),
+    ).toBe(true);
     await service.run(async (client) => {
       await expect(client.syncOutbox.count()).resolves.toBe(0);
     });
@@ -520,7 +522,9 @@ describe('PrismaSyncStore integration', () => {
 
     const records = await readAllBootstrapRecords(bootstrap.bootstrapToken, 2);
     expect(records).toHaveLength(4);
-    expect(records.some((record) => 'id' in record && record.id === standaloneIds.second.memoryId)).toBe(false);
+    expect(
+      records.some((record) => 'id' in record && record.id === standaloneIds.second.memoryId),
+    ).toBe(false);
 
     await expect(store.pull(bootstrap.highWatermarkCursor, 10)).resolves.toMatchObject({
       events: [{ sequence: '2', envelope: { eventId: standaloneIds.second.eventId } }],
