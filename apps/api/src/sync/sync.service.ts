@@ -14,10 +14,7 @@ import { SyncStoreError, type SyncStore } from './sync.store.js';
 export const SYNC_SERVICE = Symbol('SYNC_SERVICE');
 
 export type SyncServiceErrorCode =
-  | 'VALIDATION_FAILED'
-  | 'SYNC_PROTOCOL_UNSUPPORTED'
-  | 'SYNC_BLOCKED'
-  | 'SYNC_SERVICE_UNAVAILABLE';
+  'VALIDATION_FAILED' | 'SYNC_PROTOCOL_UNSUPPORTED' | 'SYNC_BLOCKED' | 'SYNC_SERVICE_UNAVAILABLE';
 
 export class SyncServiceError extends Error {
   constructor(readonly code: SyncServiceErrorCode) {
@@ -79,10 +76,7 @@ export class SyncService {
     return this.mapStoreFailure(() => this.store.startBootstrap(parsed.data.clientInstanceId));
   }
 
-  async bootstrapPage(
-    bootstrapToken: string,
-    query: unknown,
-  ): Promise<SyncBootstrapPageResponse> {
+  async bootstrapPage(bootstrapToken: string, query: unknown): Promise<SyncBootstrapPageResponse> {
     const parsed = bootstrapPageQuerySchema.safeParse(query);
     if (!z.string().uuid().safeParse(bootstrapToken).success || !parsed.success) {
       throw new SyncServiceError('VALIDATION_FAILED');
