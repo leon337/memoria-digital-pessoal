@@ -32,4 +32,13 @@ jobs:
       - run: pnpm build:packages
       - run: pnpm -r --filter './packages/*' --if-present typecheck
       - run: pnpm exec eslint packages/contracts/src packages/domain/src
-      - run: pnpm exec prettier packages/contracts/src packages/domain/src --check
+      - name: Verify package formatting and print exact diff on failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          if pnpm exec prettier packages/contracts/src packages/domain/src --check; then
+            exit 0
+          fi
+          pnpm exec prettier packages/contracts/src packages/domain/src --write
+          git diff -- packages/contracts/src packages/domain/src
+          exit 1
