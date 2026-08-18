@@ -50,7 +50,11 @@ describe('mdp-local IndexedDB schema', () => {
 
     const relations = db.transaction('factRelations').objectStore('factRelations');
     expect(relations.keyPath).toEqual(['predecessorFactId', 'successorFactId']);
-    expect([...relations.indexNames].sort()).toEqual(['memoryId', 'predecessorFactId', 'successorFactId']);
+    expect([...relations.indexNames].sort()).toEqual([
+      'memoryId',
+      'predecessorFactId',
+      'successorFactId',
+    ]);
 
     const outbox = db.transaction('syncOutbox').objectStore('syncOutbox');
     expect([...outbox.indexNames].sort()).toEqual(['memoryId', 'nextAttemptAt', 'status']);
@@ -58,9 +62,9 @@ describe('mdp-local IndexedDB schema', () => {
     expect([...db.transaction('syncConflicts').objectStore('syncConflicts').indexNames]).toEqual([
       'status',
     ]);
-    expect(
-      [...db.transaction('bootstrapStaging').objectStore('bootstrapStaging').indexNames],
-    ).toEqual(['bootstrapToken']);
+    expect([
+      ...db.transaction('bootstrapStaging').objectStore('bootstrapStaging').indexNames,
+    ]).toEqual(['bootstrapToken']);
 
     db.close();
   });
@@ -83,9 +87,9 @@ describe('mdp-local IndexedDB schema', () => {
     expect(v3.transaction('evidence').objectStore('evidence').indexNames.contains('memoryId')).toBe(
       true,
     );
-    expect(v3.transaction('facts').objectStore('facts').indexNames.contains('supersedesFactId')).toBe(
-      false,
-    );
+    expect(
+      v3.transaction('facts').objectStore('facts').indexNames.contains('supersedesFactId'),
+    ).toBe(false);
     expect(
       v3.transaction('currentFacts').objectStore('currentFacts').index('memoryId').unique,
     ).toBe(false);
@@ -186,10 +190,7 @@ describe('mdp-local IndexedDB schema', () => {
 
     await expect(
       requestAsPromise(
-        v3
-          .transaction('factRelations')
-          .objectStore('factRelations')
-          .get(['fact-a', 'fact-b']),
+        v3.transaction('factRelations').objectStore('factRelations').get(['fact-a', 'fact-b']),
       ),
     ).resolves.toMatchObject({
       memoryId: 'memory-a',
