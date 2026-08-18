@@ -7,7 +7,8 @@ import {
   type FactRelationRecord,
 } from './fact-graph.js';
 
-const at = (minute: number) => new Date(`2026-08-18T00:${minute.toString().padStart(2, '0')}:00.000Z`);
+const at = (minute: number) =>
+  new Date(`2026-08-18T00:${minute.toString().padStart(2, '0')}:00.000Z`);
 
 function nodes(...factIds: string[]): FactGraphNode[] {
   return factIds.map((factId, index) => ({ factId, createdAt: at(index) }));
