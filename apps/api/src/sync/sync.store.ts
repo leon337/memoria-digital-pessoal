@@ -1,8 +1,4 @@
-import type {
-  SyncEventEnvelope,
-  SyncPullResponse,
-  SyncPushEventResult,
-} from '@mdp/contracts';
+import type { SyncEventEnvelope, SyncPullResponse, SyncPushEventResult } from '@mdp/contracts';
 
 export const SYNC_STORE = Symbol('SYNC_STORE');
 
