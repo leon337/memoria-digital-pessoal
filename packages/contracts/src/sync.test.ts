@@ -78,9 +78,7 @@ describe('synchronization protocol contracts', () => {
 
   it('accepts protocol v1 envelopes and rejects a different persisted protocol version', () => {
     expect(syncEventEnvelopeSchema.parse(validEnvelope).protocolVersion).toBe(1);
-    expect(() =>
-      syncEventEnvelopeSchema.parse({ ...validEnvelope, protocolVersion: 2 }),
-    ).toThrow();
+    expect(() => syncEventEnvelopeSchema.parse({ ...validEnvelope, protocolVersion: 2 })).toThrow();
     expect(() =>
       syncEventEnvelopeSchema.parse({ ...validEnvelope, records: validRecords.slice(0, 3) }),
     ).toThrow();
@@ -134,9 +132,9 @@ describe('synchronization protocol contracts', () => {
   });
 
   it('validates fixed-snapshot bootstrap request, start, and page contracts', () => {
-    expect(
-      syncBootstrapStartRequestSchema.parse({ protocolVersion: 1, clientInstanceId }),
-    ).toEqual({ protocolVersion: 1, clientInstanceId });
+    expect(syncBootstrapStartRequestSchema.parse({ protocolVersion: 1, clientInstanceId })).toEqual(
+      { protocolVersion: 1, clientInstanceId },
+    );
 
     expect(
       syncBootstrapStartResponseSchema.parse({
