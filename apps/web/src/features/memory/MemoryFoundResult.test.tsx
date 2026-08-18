@@ -111,6 +111,7 @@ describe('MemoryFoundResult', () => {
           isOriginal: true,
           isCurrent: false,
           supersedesFactId: null,
+          predecessorFactIds: [],
           eventId: 'event-1',
         },
         {
@@ -122,6 +123,7 @@ describe('MemoryFoundResult', () => {
           isOriginal: false,
           isCurrent: true,
           supersedesFactId: 'fact-1',
+          predecessorFactIds: ['fact-1'],
           eventId: 'event-2',
         },
       ],
