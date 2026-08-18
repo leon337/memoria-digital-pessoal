@@ -1,0 +1,34 @@
+name: Slice 04 Package TDD
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/slice-04-tdd.yml
+      - packages/contracts/src/**
+      - packages/domain/src/**
+  push:
+    branches:
+      - slice/04-synchronization
+    paths:
+      - .github/workflows/slice-04-tdd.yml
+      - packages/contracts/src/**
+      - packages/domain/src/**
+
+permissions:
+  contents: read
+
+jobs:
+  package-tdd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run packages/contracts/src packages/domain/src
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
