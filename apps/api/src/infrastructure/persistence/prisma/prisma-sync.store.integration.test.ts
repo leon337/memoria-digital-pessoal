@@ -1,4 +1,4 @@
-import type { SyncEventEnvelope } from '@mdp/contracts';
+import type { SyncCanonicalRecord, SyncEventEnvelope } from '@mdp/contracts';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaSyncStore } from './prisma-sync.store.js';
 import { PrismaService } from './prisma.service.js';
@@ -41,6 +41,12 @@ const standaloneIds = {
     evidenceId: '88888888-8888-4888-8888-888888888882',
     eventId: '88888888-8888-4888-8888-888888888883',
     factId: '88888888-8888-4888-8888-888888888884',
+  },
+  historical: {
+    memoryId: '99999999-9999-4999-8999-999999999991',
+    evidenceId: '99999999-9999-4999-8999-999999999992',
+    eventId: '99999999-9999-4999-8999-999999999993',
+    factId: '99999999-9999-4999-8999-999999999994',
   },
 } as const;
 
@@ -98,7 +104,7 @@ function createEnvelope(text = 'Raiz sintética.'): SyncEventEnvelope {
 }
 
 function standaloneCreateEnvelope(
-  group: (typeof standaloneIds)[keyof typeof standaloneIds],
+  group: (typeof standaloneIds)['second' | 'third'],
   text: string,
   createdAt: string,
 ): SyncEventEnvelope {
@@ -218,6 +224,80 @@ async function clearSynchronizationData(): Promise<void> {
       await tx.syncFeedState.update({ where: { id: 1 }, data: { currentSequence: 0n } });
     });
   });
+}
+
+async function seedHistoricalCanonicalMemory(): Promise<void> {
+  const group = standaloneIds.historical;
+  const createdAt = new Date('2026-08-18T02:59:00.000Z');
+  await service.run((client) =>
+    client.$transaction(async (tx) => {
+      await tx.memory.create({
+        data: {
+          id: group.memoryId,
+          recordedAt: createdAt,
+          occurredAt: null,
+          temporalPrecision: 'unknown',
+        },
+      });
+      await tx.evidence.create({
+        data: {
+          id: group.evidenceId,
+          memoryId: group.memoryId,
+          kind: 'text',
+          content: 'Memória histórica sem Outbox.',
+          createdAt,
+        },
+      });
+      await tx.fact.create({
+        data: {
+          id: group.factId,
+          memoryId: group.memoryId,
+          evidenceId: group.evidenceId,
+          kind: 'autobiographical_statement',
+          content: 'Memória histórica sem Outbox.',
+          supersedesFactId: null,
+          createdAt,
+        },
+      });
+      await tx.ledgerEvent.create({
+        data: {
+          id: group.eventId,
+          memoryId: group.memoryId,
+          evidenceId: group.evidenceId,
+          factId: null,
+          supersedesFactId: null,
+          type: 'MEMORY_CREATED',
+          reason: null,
+          createdAt,
+        },
+      });
+      await tx.currentFact.create({
+        data: {
+          factId: group.factId,
+          memoryId: group.memoryId,
+          evidenceId: group.evidenceId,
+          content: 'Memória histórica sem Outbox.',
+          recordedAt: createdAt,
+        },
+      });
+    }),
+  );
+}
+
+async function readAllBootstrapRecords(
+  bootstrapToken: string,
+  pageSize: number,
+): Promise<SyncCanonicalRecord[]> {
+  const records: SyncCanonicalRecord[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await store.readBootstrapPage(bootstrapToken, offset, pageSize);
+    records.push(...page.records);
+    if (page.nextOffset === null) {
+      return records;
+    }
+    offset = page.nextOffset;
+  }
 }
 
 beforeEach(clearSynchronizationData);
@@ -399,6 +479,68 @@ describe('PrismaSyncStore integration', () => {
     });
     await expect(retentionStore.pull('0', 10)).rejects.toMatchObject({
       code: 'SYNC_CURSOR_EXPIRED',
+    });
+  });
+
+  it('bootstraps canonical rows that predate the Outbox', async () => {
+    await seedHistoricalCanonicalMemory();
+
+    const bootstrap = await store.startBootstrap(clientId);
+    expect(bootstrap).toMatchObject({
+      protocolVersion: 1,
+      highWatermarkCursor: '0',
+      totalRecords: 4,
+    });
+
+    const records = await readAllBootstrapRecords(bootstrap.bootstrapToken, 2);
+    expect(records.map((record) => record.kind)).toEqual([
+      'memory',
+      'evidence',
+      'ledgerEvent',
+      'fact',
+    ]);
+    expect(records.some((record) => 'id' in record && record.id === standaloneIds.historical.memoryId)).toBe(true);
+    await service.run(async (client) => {
+      await expect(client.syncOutbox.count()).resolves.toBe(0);
+    });
+  });
+
+  it('keeps bootstrap pages fixed while concurrent writes continue after the watermark', async () => {
+    await store.pushEvent(clientId, createEnvelope());
+    const bootstrap = await store.startBootstrap(clientId);
+    expect(bootstrap.highWatermarkCursor).toBe('1');
+    expect(bootstrap.totalRecords).toBe(4);
+
+    const second = standaloneCreateEnvelope(
+      standaloneIds.second,
+      'Criada depois do snapshot.',
+      '2026-08-18T03:07:00.000Z',
+    );
+    await store.pushEvent(clientId, second);
+
+    const records = await readAllBootstrapRecords(bootstrap.bootstrapToken, 2);
+    expect(records).toHaveLength(4);
+    expect(records.some((record) => 'id' in record && record.id === standaloneIds.second.memoryId)).toBe(false);
+
+    await expect(store.pull(bootstrap.highWatermarkCursor, 10)).resolves.toMatchObject({
+      events: [{ sequence: '2', envelope: { eventId: standaloneIds.second.eventId } }],
+      nextCursor: '2',
+      hasMore: false,
+    });
+  });
+
+  it('fails closed when a bootstrap token is expired', async () => {
+    await store.pushEvent(clientId, createEnvelope());
+    const bootstrap = await store.startBootstrap(clientId);
+    await service.run((client) =>
+      client.syncBootstrapSnapshot.update({
+        where: { token: bootstrap.bootstrapToken },
+        data: { expiresAt: new Date('2000-01-01T00:00:00.000Z') },
+      }),
+    );
+
+    await expect(store.readBootstrapPage(bootstrap.bootstrapToken, 0, 10)).rejects.toMatchObject({
+      code: 'SYNC_BOOTSTRAP_EXPIRED',
     });
   });
 });
