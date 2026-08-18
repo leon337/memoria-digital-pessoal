@@ -7,6 +7,7 @@ describe('MemoryRepositoryError', () => {
     'NOT_FOUND',
     'STALE_CORRECTION',
     'NO_CHANGE',
+    'CONFLICT_REQUIRES_RESOLUTION',
     'LOCAL_STORAGE_UNAVAILABLE',
     'LOCAL_DATA_INTEGRITY_ERROR',
   ] as const)('keeps stable safe code %s', (code) => {
