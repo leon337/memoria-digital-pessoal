@@ -202,8 +202,12 @@ describe('PrismaSyncStore integration', () => {
       missingFactIds: [ids.missingFactId],
     });
     await service.run(async (client) => {
-      await expect(client.fact.findUnique({ where: { id: ids.missingSuccessorFactId } })).resolves.toBeNull();
-      await expect(client.syncOutbox.findUnique({ where: { eventId: ids.missingEventId } })).resolves.toBeNull();
+      await expect(
+        client.fact.findUnique({ where: { id: ids.missingSuccessorFactId } }),
+      ).resolves.toBeNull();
+      await expect(
+        client.syncOutbox.findUnique({ where: { eventId: ids.missingEventId } }),
+      ).resolves.toBeNull();
     });
   });
 
@@ -240,13 +244,19 @@ describe('PrismaSyncStore integration', () => {
     });
 
     await service.run(async (client) => {
-      await expect(client.syncConflict.findUnique({ where: { memoryId: ids.memoryId } })).resolves.toMatchObject({
+      await expect(
+        client.syncConflict.findUnique({ where: { memoryId: ids.memoryId } }),
+      ).resolves.toMatchObject({
         baselineFactId: ids.rootFactId,
         candidateFactIds: [ids.branchBFactId, ids.branchCFactId],
         status: 'OPEN',
       });
-      await expect(client.currentFact.count({ where: { memoryId: ids.memoryId } })).resolves.toBe(0);
-      await expect(client.syncOutbox.findUnique({ where: { eventId: ids.branchCEventId } })).resolves.not.toBeNull();
+      await expect(client.currentFact.count({ where: { memoryId: ids.memoryId } })).resolves.toBe(
+        0,
+      );
+      await expect(
+        client.syncOutbox.findUnique({ where: { eventId: ids.branchCEventId } }),
+      ).resolves.not.toBeNull();
     });
   });
 });
