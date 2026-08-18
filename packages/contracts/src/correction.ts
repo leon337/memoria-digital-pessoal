@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  correctionReasonSchema,
-  CORRECTION_REASON_MAX_LENGTH,
-  normalizedMemoryTextSchema,
-} from './memory-input.js';
+import { correctionReasonSchema, normalizedMemoryTextSchema } from './memory-input.js';
 
 export { CORRECTION_REASON_MAX_LENGTH, correctionReasonSchema } from './memory-input.js';
 
