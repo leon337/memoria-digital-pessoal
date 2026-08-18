@@ -56,7 +56,9 @@ export function stableJson(value: unknown): string {
 }
 
 export function payloadHash(envelope: SyncEventEnvelope): string {
-  return createHash('sha256').update(stableJson(normalizeEnvelope(envelope))).digest('hex');
+  return createHash('sha256')
+    .update(stableJson(normalizeEnvelope(envelope)))
+    .digest('hex');
 }
 
 async function allocateFeedSequence(tx: Prisma.TransactionClient): Promise<bigint> {
@@ -208,7 +210,7 @@ export class PrismaCanonicalMemoryWriter {
       (item): item is Extract<SyncCanonicalRecord, { kind: 'ledgerEvent' }> =>
         item.kind === 'ledgerEvent' && item.id === envelope.eventId,
     );
-    return event?.factId === record.id ? envelope.predecessorFactIds[0] ?? null : null;
+    return event?.factId === record.id ? (envelope.predecessorFactIds[0] ?? null) : null;
   }
 
   private async addOrVerifyFact(
@@ -299,10 +301,7 @@ export class PrismaCanonicalMemoryWriter {
       });
       return;
     }
-    if (
-      existing.memoryId !== record.memoryId ||
-      existing.relationType !== record.relationType
-    ) {
+    if (existing.memoryId !== record.memoryId || existing.relationType !== record.relationType) {
       integrityViolation();
     }
   }
