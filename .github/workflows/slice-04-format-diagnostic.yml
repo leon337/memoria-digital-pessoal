@@ -1,0 +1,28 @@
+name: Slice 04 Format Diagnostic
+
+on:
+  push:
+    branches:
+      - slice/04-synchronization
+    paths:
+      - .github/workflows/slice-04-format-diagnostic.yml
+      - packages/contracts/src/sync.test.ts
+
+permissions:
+  contents: read
+
+jobs:
+  format-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Print exact Prettier diff
+        run: |
+          pnpm exec prettier packages/contracts/src/sync.test.ts --write
+          git diff -- packages/contracts/src/sync.test.ts
