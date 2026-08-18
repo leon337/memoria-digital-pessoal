@@ -65,7 +65,9 @@ export class IndexedDbSyncStore {
     const outbox = transaction.objectStore('syncOutbox');
 
     for (const result of results) {
-      const row = await requestAsPromise<LocalSyncOutboxRecord | undefined>(outbox.get(result.eventId));
+      const row = await requestAsPromise<LocalSyncOutboxRecord | undefined>(
+        outbox.get(result.eventId),
+      );
       if (row === undefined) {
         continue;
       }
@@ -104,7 +106,10 @@ export class IndexedDbSyncStore {
     const transaction = db.transaction(['syncConflicts', 'syncOutbox'], 'readonly');
     const done = transactionDone(transaction);
     const conflictRequest = transaction.objectStore('syncConflicts').get(memoryId);
-    const outboxRequest = transaction.objectStore('syncOutbox').index('memoryId').getAll(memoryId);
+    const outboxRequest = transaction
+      .objectStore('syncOutbox')
+      .index('memoryId')
+      .getAll(memoryId);
     const [conflict, outbox] = await Promise.all([
       requestAsPromise<LocalSyncConflictRecord | undefined>(conflictRequest),
       requestAsPromise<LocalSyncOutboxRecord[]>(outboxRequest),
