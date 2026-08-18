@@ -16,9 +16,7 @@ async function dependencies(path: string): Promise<string[]> {
 describe('Slice 02 scope invariants', () => {
   it('preserves the five base models and correction lineage fields', async () => {
     const schema = await text('prisma/schema.prisma');
-    const models = new Set(
-      [...schema.matchAll(/^model\s+(\w+)\s+\{/gm)].map((match) => match[1]),
-    );
+    const models = new Set([...schema.matchAll(/^model\s+(\w+)\s+\{/gm)].map((match) => match[1]));
 
     for (const model of ['CurrentFact', 'Evidence', 'Fact', 'LedgerEvent', 'Memory']) {
       expect(models.has(model)).toBe(true);
@@ -29,18 +27,21 @@ describe('Slice 02 scope invariants', () => {
     expect(schema).not.toContain('model FactVersion');
   });
 
-  it('requires database fork prevention and correction-event fact links at the Slice 02 boundary', async () => {
-    const migration = await text(
-      'prisma/migrations/20260817000100_slice_02_correction_history/migration.sql',
-    );
+  it(
+    'requires database fork prevention and correction-event fact links at the Slice 02 boundary',
+    async () => {
+      const migration = await text(
+        'prisma/migrations/20260817000100_slice_02_correction_history/migration.sql',
+      );
 
-    expect(migration).not.toMatch(/CREATE TABLE/i);
-    expect(migration).toContain('CREATE UNIQUE INDEX "facts_supersedes_fact_id_key"');
-    expect(migration).toContain('ledger_events_memory_corrected_fact_links_check');
-    expect(migration).toContain('"type" <> \'MEMORY_CORRECTED\'');
-    expect(migration).toContain('"fact_id" IS NOT NULL');
-    expect(migration).toContain('"supersedes_fact_id" IS NOT NULL');
-  });
+      expect(migration).not.toMatch(/CREATE TABLE/i);
+      expect(migration).toContain('CREATE UNIQUE INDEX "facts_supersedes_fact_id_key"');
+      expect(migration).toContain('ledger_events_memory_corrected_fact_links_check');
+      expect(migration).toContain('"type" <> \'MEMORY_CORRECTED\'');
+      expect(migration).toContain('"fact_id" IS NOT NULL');
+      expect(migration).toContain('"supersedes_fact_id" IS NOT NULL');
+    },
+  );
 
   it('keeps future-slice infrastructure and AI dependencies out', async () => {
     const paths = [
