@@ -57,7 +57,8 @@ export class IndexedDbSyncStore {
     return id;
   }
 
-  async applyPushResults(results: SyncPushEventResult[], _now: Date): Promise<void> {
+  async applyPushResults(results: SyncPushEventResult[], now: Date): Promise<void> {
+    void now;
     const db = await this.database();
     const transaction = db.transaction('syncOutbox', 'readwrite');
     const done = transactionDone(transaction);
