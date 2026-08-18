@@ -63,16 +63,17 @@ model Fact {
   evidenceId       String        @map("evidence_id") @db.Uuid
   kind             String        @db.VarChar(64)
   content          String        @db.VarChar(4000)
-  supersedesFactId String?       @unique @map("supersedes_fact_id") @db.Uuid
+  supersedesFactId String?       @map("supersedes_fact_id") @db.Uuid
   createdAt        DateTime      @map("created_at") @db.Timestamptz(3)
   memory           Memory        @relation(fields: [memoryId], references: [id], onDelete: Restrict)
   evidence         Evidence      @relation(fields: [evidenceId], references: [id], onDelete: Restrict)
   supersedes       Fact?         @relation("FactSupersession", fields: [supersedesFactId], references: [id], onDelete: Restrict)
-  successor        Fact?         @relation("FactSupersession")
+  successors       Fact[]        @relation("FactSupersession")
   newFactEvents    LedgerEvent[] @relation("CorrectionNewFact")
   supersededEvents LedgerEvent[] @relation("CorrectionPreviousFact")
   current          CurrentFact?
 
+  @@unique([id, memoryId], map: "facts_id_memory_id_key")
   @@index([memoryId])
   @@map("facts")
 }
@@ -89,4 +90,62 @@ model CurrentFact {
 
   @@index([recordedAt, factId])
   @@map("current_facts")
+}
+
+model FactRelation {
+  memoryId          String @map("memory_id") @db.Uuid
+  predecessorFactId String @map("predecessor_fact_id") @db.Uuid
+  successorFactId   String @map("successor_fact_id") @db.Uuid
+  relationType      String @map("relation_type") @db.VarChar(32)
+
+  @@id([predecessorFactId, successorFactId], map: "fact_relations_pkey")
+  @@index([memoryId], map: "fact_relations_memory_id_idx")
+  @@index([predecessorFactId], map: "fact_relations_predecessor_idx")
+  @@index([successorFactId], map: "fact_relations_successor_idx")
+  @@map("fact_relations")
+}
+
+model SyncFeedState {
+  id              Int    @id(map: "sync_feed_state_pkey")
+  currentSequence BigInt @map("current_sequence")
+
+  @@map("sync_feed_state")
+}
+
+model SyncOutbox {
+  sequence               BigInt   @id(map: "sync_outbox_pkey")
+  eventId                String   @unique(map: "sync_outbox_event_id_key") @map("event_id") @db.Uuid
+  protocolVersion        Int      @map("protocol_version")
+  eventType              String   @map("event_type") @db.VarChar(64)
+  memoryId               String   @map("memory_id") @db.Uuid
+  originClientInstanceId String?  @map("origin_client_instance_id") @db.Uuid
+  payload                Json
+  payloadHash            String   @map("payload_hash") @db.Char(64)
+  createdAt              DateTime @map("created_at") @db.Timestamptz(3)
+
+  @@index([memoryId], map: "sync_outbox_memory_id_idx")
+  @@index([createdAt], map: "sync_outbox_created_at_idx")
+  @@map("sync_outbox")
+}
+
+model SyncConflict {
+  memoryId         String   @id(map: "sync_conflicts_pkey") @map("memory_id") @db.Uuid
+  baselineFactId   String   @map("baseline_fact_id") @db.Uuid
+  candidateFactIds Json     @map("candidate_fact_ids")
+  status           String   @db.VarChar(16)
+  resolutionFactId String?  @map("resolution_fact_id") @db.Uuid
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  @@map("sync_conflicts")
+}
+
+model SyncBootstrapSnapshot {
+  token         String   @id(map: "sync_bootstrap_snapshots_pkey") @db.Uuid
+  highWatermark BigInt   @map("high_watermark")
+  records       Json
+  expiresAt     DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt     DateTime @map("created_at") @db.Timestamptz(3)
+
+  @@index([expiresAt], map: "sync_bootstrap_snapshots_expires_at_idx")
+  @@map("sync_bootstrap_snapshots")
 }
