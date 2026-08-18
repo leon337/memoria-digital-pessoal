@@ -40,46 +40,38 @@ function createEnvelope(
     records: [
       {
         kind: 'memory',
-        value: {
-          id: group.memoryId,
-          recordedAt,
-          occurredAt: null,
-          temporalPrecision: 'unknown',
-        },
+        id: group.memoryId,
+        recordedAt,
+        occurredAt: null,
+        temporalPrecision: 'unknown',
       },
       {
         kind: 'evidence',
-        value: {
-          id: group.evidenceId,
-          memoryId: group.memoryId,
-          evidenceKind: 'text',
-          content: text,
-          createdAt: recordedAt,
-        },
+        id: group.evidenceId,
+        memoryId: group.memoryId,
+        evidenceKind: 'text',
+        content: text,
+        createdAt: recordedAt,
       },
       {
         kind: 'ledgerEvent',
-        value: {
-          id: group.eventId,
-          memoryId: group.memoryId,
-          evidenceId: group.evidenceId,
-          factId: null,
-          supersedesFactId: null,
-          eventType: 'MEMORY_CREATED',
-          reason: null,
-          createdAt: recordedAt,
-        },
+        id: group.eventId,
+        memoryId: group.memoryId,
+        evidenceId: group.evidenceId,
+        factId: null,
+        supersedesFactId: null,
+        eventType: 'MEMORY_CREATED',
+        reason: null,
+        createdAt: recordedAt,
       },
       {
         kind: 'fact',
-        value: {
-          id: group.factId,
-          memoryId: group.memoryId,
-          evidenceId: group.evidenceId,
-          factKind: 'autobiographical_statement',
-          content: text,
-          createdAt: recordedAt,
-        },
+        id: group.factId,
+        memoryId: group.memoryId,
+        evidenceId: group.evidenceId,
+        factKind: 'autobiographical_statement',
+        content: text,
+        createdAt: recordedAt,
       },
     ],
   };
@@ -143,9 +135,7 @@ describe('PrismaCanonicalMemoryWriter integration', () => {
     });
 
     await expect(
-      service.run((client) =>
-        client.$transaction((tx) => writer.write(tx, envelope, null)),
-      ),
+      service.run((client) => client.$transaction((tx) => writer.write(tx, envelope, null))),
     ).rejects.toThrow('forced sync outbox failure');
 
     await service.run(async (client) => {
@@ -155,9 +145,9 @@ describe('PrismaCanonicalMemoryWriter integration', () => {
       await expect(client.ledgerEvent.count()).resolves.toBe(0);
       await expect(client.currentFact.count()).resolves.toBe(0);
       await expect(client.syncOutbox.count()).resolves.toBe(0);
-      await expect(client.syncFeedState.findUniqueOrThrow({ where: { id: 1 } })).resolves.toMatchObject(
-        { currentSequence: 0n },
-      );
+      await expect(
+        client.syncFeedState.findUniqueOrThrow({ where: { id: 1 } }),
+      ).resolves.toMatchObject({ currentSequence: 0n });
     });
   });
 
@@ -184,9 +174,9 @@ describe('PrismaCanonicalMemoryWriter integration', () => {
       expect(new Set(feed.map((entry) => entry.eventId))).toEqual(
         new Set([ids.first.eventId, ids.second.eventId]),
       );
-      await expect(client.syncFeedState.findUniqueOrThrow({ where: { id: 1 } })).resolves.toMatchObject(
-        { currentSequence: 2n },
-      );
+      await expect(
+        client.syncFeedState.findUniqueOrThrow({ where: { id: 1 } }),
+      ).resolves.toMatchObject({ currentSequence: 2n });
     });
   });
 });
