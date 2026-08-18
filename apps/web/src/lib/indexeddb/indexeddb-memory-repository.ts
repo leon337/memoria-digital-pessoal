@@ -373,6 +373,7 @@ export class IndexedDbMemoryRepository implements MemoryRepository {
             isOriginal: true,
             isCurrent: node.isCurrent,
             supersedesFactId: null,
+            predecessorFactIds: [],
             eventId: event.id,
           };
         }
@@ -401,6 +402,7 @@ export class IndexedDbMemoryRepository implements MemoryRepository {
           isOriginal: false,
           isCurrent: node.isCurrent,
           supersedesFactId: node.supersedesFactId,
+          predecessorFactIds: node.supersedesFactId === null ? [] : [node.supersedesFactId],
           eventId: event.id,
         };
       });
