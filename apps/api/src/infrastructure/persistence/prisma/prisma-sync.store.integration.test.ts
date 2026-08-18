@@ -29,6 +29,21 @@ const ids = {
   missingSuccessorFactId: '66666666-6666-4666-8666-666666666664',
 } as const;
 
+const standaloneIds = {
+  second: {
+    memoryId: '77777777-7777-4777-8777-777777777771',
+    evidenceId: '77777777-7777-4777-8777-777777777772',
+    eventId: '77777777-7777-4777-8777-777777777773',
+    factId: '77777777-7777-4777-8777-777777777774',
+  },
+  third: {
+    memoryId: '88888888-8888-4888-8888-888888888881',
+    evidenceId: '88888888-8888-4888-8888-888888888882',
+    eventId: '88888888-8888-4888-8888-888888888883',
+    factId: '88888888-8888-4888-8888-888888888884',
+  },
+} as const;
+
 const recordedAt = '2026-08-18T03:00:00.000Z';
 
 function memoryRecord() {
@@ -77,6 +92,57 @@ function createEnvelope(text = 'Raiz sintética.'): SyncEventEnvelope {
         factKind: 'autobiographical_statement',
         content: text,
         createdAt: recordedAt,
+      },
+    ],
+  };
+}
+
+function standaloneCreateEnvelope(
+  group: (typeof standaloneIds)[keyof typeof standaloneIds],
+  text: string,
+  createdAt: string,
+): SyncEventEnvelope {
+  return {
+    protocolVersion: 1,
+    eventId: group.eventId,
+    eventType: 'MEMORY_CREATED',
+    memoryId: group.memoryId,
+    predecessorFactIds: [],
+    records: [
+      {
+        kind: 'memory',
+        id: group.memoryId,
+        recordedAt: createdAt,
+        occurredAt: null,
+        temporalPrecision: 'unknown',
+      },
+      {
+        kind: 'evidence',
+        id: group.evidenceId,
+        memoryId: group.memoryId,
+        evidenceKind: 'text',
+        content: text,
+        createdAt,
+      },
+      {
+        kind: 'ledgerEvent',
+        id: group.eventId,
+        memoryId: group.memoryId,
+        evidenceId: group.evidenceId,
+        factId: null,
+        supersedesFactId: null,
+        eventType: 'MEMORY_CREATED',
+        reason: null,
+        createdAt,
+      },
+      {
+        kind: 'fact',
+        id: group.factId,
+        memoryId: group.memoryId,
+        evidenceId: group.evidenceId,
+        factKind: 'autobiographical_statement',
+        content: text,
+        createdAt,
       },
     ],
   };
@@ -257,6 +323,82 @@ describe('PrismaSyncStore integration', () => {
       await expect(
         client.syncOutbox.findUnique({ where: { eventId: ids.branchCEventId } }),
       ).resolves.not.toBeNull();
+    });
+  });
+
+  it('pulls a commit-ordered feed with stable cursor progression and rejects a future cursor', async () => {
+    const second = standaloneCreateEnvelope(
+      standaloneIds.second,
+      'Segundo evento sintético.',
+      '2026-08-18T03:04:00.000Z',
+    );
+    await store.pushEvent(clientId, createEnvelope());
+    await store.pushEvent(clientId, second);
+
+    await expect(store.pull('0', 1)).resolves.toMatchObject({
+      protocolVersion: 1,
+      events: [{ sequence: '1', envelope: { eventId: ids.rootEventId } }],
+      nextCursor: '1',
+      hasMore: true,
+    });
+    await expect(store.pull('1', 10)).resolves.toMatchObject({
+      protocolVersion: 1,
+      events: [{ sequence: '2', envelope: { eventId: standaloneIds.second.eventId } }],
+      nextCursor: '2',
+      hasMore: false,
+    });
+    await expect(store.pull('2', 10)).resolves.toEqual({
+      protocolVersion: 1,
+      events: [],
+      nextCursor: '2',
+      hasMore: false,
+    });
+    await expect(store.pull('3', 10)).rejects.toMatchObject({
+      code: 'SYNC_INTEGRITY_VIOLATION',
+    });
+  });
+
+  it('expires only cursors older than oldest retained minus one and preserves canonical rows', async () => {
+    const retentionStore = new PrismaSyncStore({
+      prisma: service,
+      env: {
+        port: 3000,
+        databaseUrl,
+        webOrigin: 'http://127.0.0.1:5173',
+        syncMaxBatchSize: 50,
+        syncOutboxMaxEntries: 2,
+        syncBootstrapTtlSeconds: 900,
+      },
+    });
+    const second = standaloneCreateEnvelope(
+      standaloneIds.second,
+      'Segundo evento retido.',
+      '2026-08-18T03:05:00.000Z',
+    );
+    const third = standaloneCreateEnvelope(
+      standaloneIds.third,
+      'Terceiro evento retido.',
+      '2026-08-18T03:06:00.000Z',
+    );
+
+    await retentionStore.pushEvent(clientId, createEnvelope());
+    await retentionStore.pushEvent(clientId, second);
+    await retentionStore.pushEvent(clientId, third);
+
+    await service.run(async (client) => {
+      const outbox = await client.syncOutbox.findMany({ orderBy: { sequence: 'asc' } });
+      expect(outbox.map((entry) => entry.sequence)).toEqual([2n, 3n]);
+      await expect(client.memory.count()).resolves.toBe(3);
+      await expect(client.fact.count()).resolves.toBe(3);
+    });
+
+    await expect(retentionStore.pull('1', 10)).resolves.toMatchObject({
+      events: [{ sequence: '2' }, { sequence: '3' }],
+      nextCursor: '3',
+      hasMore: false,
+    });
+    await expect(retentionStore.pull('0', 10)).rejects.toMatchObject({
+      code: 'SYNC_CURSOR_EXPIRED',
     });
   });
 });
