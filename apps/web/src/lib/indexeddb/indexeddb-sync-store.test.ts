@@ -237,8 +237,11 @@ describe('IndexedDbSyncStore atomic pull application', () => {
       createdAt: '2026-08-18T09:02:00.000Z',
     });
     divergent.records[0] = {
-      ...divergent.records[0]!,
+      kind: 'memory',
+      id: memoryId,
       recordedAt: '2026-08-18T09:00:01.000Z',
+      occurredAt: null,
+      temporalPrecision: 'unknown',
     };
 
     await expect(store.applyPullPage(pullPage([divergent], '2'))).rejects.toEqual(
