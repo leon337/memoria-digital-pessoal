@@ -3,9 +3,7 @@ import type { SyncEventEnvelope, SyncPullResponse, SyncPushEventResult } from '@
 export const SYNC_STORE = Symbol('SYNC_STORE');
 
 export type SyncStoreErrorCode =
-  | 'SYNC_CURSOR_EXPIRED'
-  | 'SYNC_INTEGRITY_VIOLATION'
-  | 'SYNC_BOOTSTRAP_EXPIRED';
+  'SYNC_CURSOR_EXPIRED' | 'SYNC_INTEGRITY_VIOLATION' | 'SYNC_BOOTSTRAP_EXPIRED';
 
 export class SyncStoreError extends Error {
   constructor(readonly code: SyncStoreErrorCode) {
