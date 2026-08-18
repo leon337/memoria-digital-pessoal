@@ -1,6 +1,10 @@
 name: Slice 04 Format Diagnostic
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/slice-04-format-diagnostic.yml
+      - packages/contracts/src/sync.test.ts
   push:
     branches:
       - slice/04-synchronization
