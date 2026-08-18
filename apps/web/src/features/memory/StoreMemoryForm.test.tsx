@@ -10,6 +10,7 @@ function repository(): MemoryRepository {
     create: vi.fn(),
     query: vi.fn(),
     correct: vi.fn(),
+    resolveConflict: vi.fn(),
     history: vi.fn(),
   };
 }
