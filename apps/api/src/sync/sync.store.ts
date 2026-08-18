@@ -1,4 +1,10 @@
-import type { SyncEventEnvelope, SyncPullResponse, SyncPushEventResult } from '@mdp/contracts';
+import type {
+  SyncBootstrapPageResponse,
+  SyncBootstrapStartResponse,
+  SyncEventEnvelope,
+  SyncPullResponse,
+  SyncPushEventResult,
+} from '@mdp/contracts';
 
 export const SYNC_STORE = Symbol('SYNC_STORE');
 
@@ -15,4 +21,10 @@ export class SyncStoreError extends Error {
 export interface SyncStore {
   pushEvent(clientInstanceId: string, envelope: SyncEventEnvelope): Promise<SyncPushEventResult>;
   pull(after: string, limit: number): Promise<SyncPullResponse>;
+  startBootstrap(clientInstanceId: string): Promise<SyncBootstrapStartResponse>;
+  readBootstrapPage(
+    bootstrapToken: string,
+    offset: number,
+    limit: number,
+  ): Promise<SyncBootstrapPageResponse>;
 }
