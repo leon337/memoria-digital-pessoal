@@ -124,9 +124,7 @@ function toLocalRecord(record: SyncCanonicalRecord): object {
         memoryId: record.memoryId,
         evidenceId: record.evidenceId,
         ...(record.factId === null ? {} : { factId: record.factId }),
-        ...(record.supersedesFactId === null
-          ? {}
-          : { supersedesFactId: record.supersedesFactId }),
+        ...(record.supersedesFactId === null ? {} : { supersedesFactId: record.supersedesFactId }),
         type: record.eventType,
         reason: record.reason,
         createdAt: new Date(record.createdAt),
