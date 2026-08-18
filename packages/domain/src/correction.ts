@@ -75,24 +75,34 @@ export type OrderedTextFactHistoryNode = TextFactHistoryNode & {
   readonly isCurrent: boolean;
 };
 
-export function createTextCorrectionRecord(
-  input: CreateTextCorrectionRecordInput,
-): TextCorrectionRecord {
-  const content = input.text.trim();
+export function normalizeCorrectionText(text: string): string {
+  const content = text.trim();
   if (content.length === 0) {
     throw new CorrectionDomainError('EMPTY_CORRECTION');
   }
   if (content.length > 4000) {
     throw new CorrectionDomainError('TEXT_TOO_LONG');
   }
+  return content;
+}
+
+export function normalizeCorrectionReason(reason?: string): string | null {
+  const normalizedReason = reason?.trim() ?? '';
+  if (normalizedReason.length > 500) {
+    throw new CorrectionDomainError('REASON_TOO_LONG');
+  }
+  return normalizedReason.length === 0 ? null : normalizedReason;
+}
+
+export function createTextCorrectionRecord(
+  input: CreateTextCorrectionRecordInput,
+): TextCorrectionRecord {
+  const content = normalizeCorrectionText(input.text);
   if (content === input.previous.content.trim()) {
     throw new CorrectionDomainError('NO_CHANGE');
   }
 
-  const normalizedReason = input.reason?.trim() ?? '';
-  if (normalizedReason.length > 500) {
-    throw new CorrectionDomainError('REASON_TOO_LONG');
-  }
+  const normalizedReason = normalizeCorrectionReason(input.reason);
 
   const evidence = Object.freeze({
     id: input.ids.evidenceId,
@@ -117,7 +127,7 @@ export function createTextCorrectionRecord(
     factId: input.ids.factId,
     supersedesFactId: input.previous.factId,
     type: 'MEMORY_CORRECTED' as const,
-    reason: normalizedReason.length === 0 ? null : normalizedReason,
+    reason: normalizedReason,
     createdAt: input.correctedAt,
   });
   const currentFact = Object.freeze({
