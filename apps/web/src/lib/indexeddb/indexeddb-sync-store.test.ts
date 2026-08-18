@@ -1,11 +1,13 @@
 // @vitest-environment node
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
-import type { SyncEventEnvelope } from '@mdp/contracts';
+import type { SyncEventEnvelope, SyncPullResponse } from '@mdp/contracts';
+import { MemoryRepositoryError } from '../memory-repository.js';
 import {
   openMdpLocalDatabase,
   requestAsPromise,
   transactionDone,
+  type LocalCurrentFactRecord,
   type LocalSyncConflictRecord,
   type LocalSyncOutboxRecord,
 } from './mdp-local-db.js';
@@ -61,6 +63,72 @@ const envelope: SyncEventEnvelope = {
     },
   ],
 };
+
+function correctionEnvelope(input: {
+  evidenceId: string;
+  eventId: string;
+  factId: string;
+  text: string;
+  createdAt: string;
+}): SyncEventEnvelope {
+  return {
+    protocolVersion: 1,
+    eventId: input.eventId,
+    eventType: 'MEMORY_CORRECTED',
+    memoryId,
+    predecessorFactIds: [factId],
+    records: [
+      envelope.records[0]!,
+      {
+        kind: 'evidence',
+        id: input.evidenceId,
+        memoryId,
+        evidenceKind: 'text',
+        content: input.text,
+        createdAt: input.createdAt,
+      },
+      {
+        kind: 'ledgerEvent',
+        id: input.eventId,
+        memoryId,
+        evidenceId: input.evidenceId,
+        factId: input.factId,
+        supersedesFactId: factId,
+        eventType: 'MEMORY_CORRECTED',
+        reason: null,
+        createdAt: input.createdAt,
+      },
+      {
+        kind: 'fact',
+        id: input.factId,
+        memoryId,
+        evidenceId: input.evidenceId,
+        factKind: 'autobiographical_statement',
+        content: input.text,
+        createdAt: input.createdAt,
+      },
+      {
+        kind: 'factRelation',
+        memoryId,
+        predecessorFactId: factId,
+        successorFactId: input.factId,
+        relationType: 'SUPERSEDES',
+      },
+    ],
+  };
+}
+
+function pullPage(events: SyncEventEnvelope[], nextCursor: string): SyncPullResponse {
+  return {
+    protocolVersion: 1,
+    events: events.map((event, index) => ({
+      sequence: String(Number(nextCursor) - events.length + index + 1),
+      envelope: event,
+    })),
+    nextCursor,
+    hasMore: false,
+  };
+}
 
 async function seedOutbox(factory: IDBFactory): Promise<void> {
   const db = await openMdpLocalDatabase(factory);
@@ -122,5 +190,121 @@ describe('IndexedDbSyncStore identity and push acknowledgements', () => {
 
     await expect(pending(factory)).resolves.toBeUndefined();
     await expect(store.getMemoryStatus(memoryId)).resolves.toBe('CONFLICT');
+  });
+});
+
+describe('IndexedDbSyncStore atomic pull application', () => {
+  it('commits canonical rows and projection before advancing the confirmed cursor', async () => {
+    const factory = new IDBFactory();
+    const store = new IndexedDbSyncStore({ factory });
+
+    await store.applyPullPage(pullPage([envelope], '1'));
+
+    await expect(store.getConfirmedCursor()).resolves.toBe('1');
+    const db = await openMdpLocalDatabase(factory);
+    const tx = db.transaction(['memories', 'evidence', 'ledgerEvents', 'facts', 'currentFacts']);
+    const done = transactionDone(tx);
+    const [memory, evidence, ledger, fact, current] = await Promise.all([
+      requestAsPromise(tx.objectStore('memories').get(memoryId)),
+      requestAsPromise(tx.objectStore('evidence').get(evidenceId)),
+      requestAsPromise(tx.objectStore('ledgerEvents').get(eventId)),
+      requestAsPromise(tx.objectStore('facts').get(factId)),
+      requestAsPromise<LocalCurrentFactRecord[]>(
+        tx.objectStore('currentFacts').index('memoryId').getAll(memoryId),
+      ),
+    ]);
+    await done;
+    db.close();
+
+    expect(memory).toBeTruthy();
+    expect(evidence).toBeTruthy();
+    expect(ledger).toBeTruthy();
+    expect(fact).toBeTruthy();
+    expect(current).toHaveLength(1);
+    expect(current[0]?.factId).toBe(factId);
+  });
+
+  it('fails closed on immutable content mismatch and leaves cursor and new rows unchanged', async () => {
+    const factory = new IDBFactory();
+    const store = new IndexedDbSyncStore({ factory });
+    await store.applyPullPage(pullPage([envelope], '1'));
+
+    const divergent = correctionEnvelope({
+      evidenceId: '0198d001-0000-7000-8000-000000000030',
+      eventId: '0198d001-0000-7000-8000-000000000031',
+      factId: '0198d001-0000-7000-8000-000000000032',
+      text: 'Correção que não deve ser aplicada.',
+      createdAt: '2026-08-18T09:02:00.000Z',
+    });
+    divergent.records[0] = {
+      ...divergent.records[0]!,
+      recordedAt: '2026-08-18T09:00:01.000Z',
+    };
+
+    await expect(store.applyPullPage(pullPage([divergent], '2'))).rejects.toEqual(
+      expect.objectContaining<Partial<MemoryRepositoryError>>({
+        code: 'LOCAL_DATA_INTEGRITY_ERROR',
+      }),
+    );
+    await expect(store.getConfirmedCursor()).resolves.toBe('1');
+
+    const db = await openMdpLocalDatabase(factory);
+    const tx = db.transaction('evidence');
+    const done = transactionDone(tx);
+    const rejectedEvidence = await requestAsPromise(
+      tx.objectStore('evidence').get('0198d001-0000-7000-8000-000000000030'),
+    );
+    await done;
+    db.close();
+    expect(rejectedEvidence).toBeUndefined();
+  });
+
+  it('reprojects two accepted successors of the same baseline as an explicit conflict', async () => {
+    const factory = new IDBFactory();
+    const store = new IndexedDbSyncStore({ factory });
+    await store.applyPullPage(pullPage([envelope], '1'));
+
+    const branchB = correctionEnvelope({
+      evidenceId: '0198d001-0000-7000-8000-000000000010',
+      eventId: '0198d001-0000-7000-8000-000000000011',
+      factId: '0198d001-0000-7000-8000-000000000012',
+      text: 'Ramo sintético B.',
+      createdAt: '2026-08-18T09:03:00.000Z',
+    });
+    const branchC = correctionEnvelope({
+      evidenceId: '0198d001-0000-7000-8000-000000000020',
+      eventId: '0198d001-0000-7000-8000-000000000021',
+      factId: '0198d001-0000-7000-8000-000000000022',
+      text: 'Ramo sintético C.',
+      createdAt: '2026-08-18T09:04:00.000Z',
+    });
+
+    await store.applyPullPage(pullPage([branchB, branchC], '3'));
+
+    await expect(store.getConfirmedCursor()).resolves.toBe('3');
+    await expect(store.getMemoryStatus(memoryId)).resolves.toBe('CONFLICT');
+    const db = await openMdpLocalDatabase(factory);
+    const tx = db.transaction(['currentFacts', 'syncConflicts']);
+    const done = transactionDone(tx);
+    const [current, conflict] = await Promise.all([
+      requestAsPromise<LocalCurrentFactRecord[]>(
+        tx.objectStore('currentFacts').index('memoryId').getAll(memoryId),
+      ),
+      requestAsPromise<LocalSyncConflictRecord | undefined>(
+        tx.objectStore('syncConflicts').get(memoryId),
+      ),
+    ]);
+    await done;
+    db.close();
+
+    expect(current).toEqual([]);
+    expect(conflict).toMatchObject({
+      baselineFactId: factId,
+      candidateFactIds: [
+        '0198d001-0000-7000-8000-000000000012',
+        '0198d001-0000-7000-8000-000000000022',
+      ],
+      status: 'OPEN',
+    });
   });
 });
