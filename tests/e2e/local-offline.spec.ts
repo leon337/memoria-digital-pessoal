@@ -218,7 +218,7 @@ test('local storage failure never reports a successful memory write', async ({ b
   await context.close();
 });
 
-test('browser upgrades seeded v1 data to v2 without loss and remains writable', async ({
+test('browser upgrades seeded v1 data to v3 without loss and remains writable', async ({
   page,
 }) => {
   await page.route('**/assets/*.js', (route) => route.abort());
@@ -234,19 +234,25 @@ test('browser upgrades seeded v1 data to v2 without loss and remains writable', 
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
+    const facts = db.transaction('facts').objectStore('facts');
     const result = {
       version: db.version,
       evidenceMemoryIndex: db
         .transaction('evidence')
         .objectStore('evidence')
         .indexNames.contains('memoryId'),
-      predecessorUnique: db.transaction('facts').objectStore('facts').index('supersedesFactId')
-        .unique,
+      predecessorIndexPresent: facts.indexNames.contains('supersedesFactId'),
+      factRelationsStore: db.objectStoreNames.contains('factRelations'),
     };
     db.close();
     return result;
   });
-  expect(schema).toEqual({ version: 2, evidenceMemoryIndex: true, predecessorUnique: true });
+  expect(schema).toEqual({
+    version: 3,
+    evidenceMemoryIndex: true,
+    predecessorIndexPresent: false,
+    factRelationsStore: true,
+  });
 
   await queryMemory(page, 'migrada', 'Memória sintética migrada da versão um.');
   await page.getByRole('button', { name: 'Ver histórico' }).click();
