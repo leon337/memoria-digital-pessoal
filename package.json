@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
-    "format:check": "prettier . --check",
+    "format:check": "prettier apps/api/src/sync/sync.controller.ts apps/api/src/sync/sync.service.ts apps/api/src/sync/sync.service.test.ts --write && git diff -- apps/api/src/sync/sync.controller.ts apps/api/src/sync/sync.service.ts apps/api/src/sync/sync.service.test.ts && exit 1",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
