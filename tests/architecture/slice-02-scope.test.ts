@@ -27,21 +27,18 @@ describe('Slice 02 scope invariants', () => {
     expect(schema).not.toContain('model FactVersion');
   });
 
-  it(
-    'requires database fork prevention and correction-event fact links at the Slice 02 boundary',
-    async () => {
-      const migration = await text(
-        'prisma/migrations/20260817000100_slice_02_correction_history/migration.sql',
-      );
+  it('requires database fork prevention and correction-event fact links at the Slice 02 boundary', async () => {
+    const migration = await text(
+      'prisma/migrations/20260817000100_slice_02_correction_history/migration.sql',
+    );
 
-      expect(migration).not.toMatch(/CREATE TABLE/i);
-      expect(migration).toContain('CREATE UNIQUE INDEX "facts_supersedes_fact_id_key"');
-      expect(migration).toContain('ledger_events_memory_corrected_fact_links_check');
-      expect(migration).toContain('"type" <> \'MEMORY_CORRECTED\'');
-      expect(migration).toContain('"fact_id" IS NOT NULL');
-      expect(migration).toContain('"supersedes_fact_id" IS NOT NULL');
-    },
-  );
+    expect(migration).not.toMatch(/CREATE TABLE/i);
+    expect(migration).toContain('CREATE UNIQUE INDEX "facts_supersedes_fact_id_key"');
+    expect(migration).toContain('ledger_events_memory_corrected_fact_links_check');
+    expect(migration).toContain('"type" <> \'MEMORY_CORRECTED\'');
+    expect(migration).toContain('"fact_id" IS NOT NULL');
+    expect(migration).toContain('"supersedes_fact_id" IS NOT NULL');
+  });
 
   it('keeps future-slice infrastructure and AI dependencies out', async () => {
     const paths = [
