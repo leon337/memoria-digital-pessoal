@@ -1,14 +1,16 @@
 import { z } from 'zod';
+import {
+  correctionReasonSchema,
+  memoryTextSchema,
+  MEMORY_TEXT_MAX_LENGTH,
+  normalizedMemoryTextSchema,
+} from './memory-input.js';
 
-export const MEMORY_TEXT_MAX_LENGTH = 4000;
+export { MEMORY_TEXT_MAX_LENGTH, memoryTextSchema } from './memory-input.js';
 export const MEMORY_QUERY_MAX_LENGTH = 200;
 
 export const createMemoryRequestSchema = z.object({
-  text: z
-    .string()
-    .min(1)
-    .max(MEMORY_TEXT_MAX_LENGTH)
-    .refine((value) => value.trim().length > 0, 'text must contain non-whitespace content'),
+  text: memoryTextSchema,
 });
 
 export const memoryQuerySchema = z.string().trim().min(1).max(MEMORY_QUERY_MAX_LENGTH);
@@ -48,6 +50,12 @@ export const getMemoryResponseSchema = z.object({
   }),
 });
 
+const conflictFactSchema = z.object({
+  factId: z.string(),
+  evidenceId: z.string(),
+  content: z.string(),
+});
+
 export const memoryQueryResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('FOUND'),
@@ -63,9 +71,29 @@ export const memoryQueryResponseSchema = z.discriminatedUnion('status', [
     answer: z.null(),
     provenance: z.null(),
   }),
+  z.object({
+    status: z.literal('CONFLICT'),
+    answer: z.null(),
+    provenance: z.null(),
+    conflict: z.object({
+      memoryId: z.string(),
+      baseline: conflictFactSchema,
+      candidates: z.array(conflictFactSchema).min(2),
+    }),
+  }),
 ]);
+
+export const resolveConflictRequestSchema = z.object({
+  expectedCandidateFactIds: z
+    .array(z.string().uuid())
+    .min(2)
+    .refine((ids) => new Set(ids).size === ids.length, 'candidate fact ids must be distinct'),
+  text: normalizedMemoryTextSchema,
+  reason: correctionReasonSchema.optional(),
+});
 
 export type CreateMemoryRequest = z.infer<typeof createMemoryRequestSchema>;
 export type CreateMemoryResponse = z.infer<typeof createMemoryResponseSchema>;
 export type GetMemoryResponse = z.infer<typeof getMemoryResponseSchema>;
 export type MemoryQueryResponse = z.infer<typeof memoryQueryResponseSchema>;
+export type ResolveConflictRequest = z.infer<typeof resolveConflictRequestSchema>;
