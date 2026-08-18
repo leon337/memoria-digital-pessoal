@@ -1,6 +1,8 @@
 export {
   CorrectionDomainError,
   createTextCorrectionRecord,
+  normalizeCorrectionReason,
+  normalizeCorrectionText,
   orderTextFactHistory,
 } from './correction.js';
 export type {
@@ -10,6 +12,15 @@ export type {
   TextCorrectionRecord,
   TextFactHistoryNode,
 } from './correction.js';
+export {
+  ConflictResolutionDomainError,
+  createConflictResolutionRecord,
+} from './conflict-resolution.js';
+export type {
+  ConflictResolutionDomainErrorCode,
+  ConflictResolutionRecord,
+  CreateConflictResolutionRecordInput,
+} from './conflict-resolution.js';
 export {
   FactGraphDomainError,
   deriveMemoryProjection,
