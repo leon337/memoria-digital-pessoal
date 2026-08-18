@@ -2,6 +2,7 @@ export { apiErrorCodeSchema, apiErrorEnvelopeSchema } from './api-error.js';
 export type { ApiErrorCode, ApiErrorEnvelope } from './api-error.js';
 export {
   CORRECTION_REASON_MAX_LENGTH,
+  correctionReasonSchema,
   correctMemoryRequestSchema,
   correctMemoryResponseSchema,
   memoryHistoryResponseSchema,
@@ -21,12 +22,15 @@ export {
   getMemoryResponseSchema,
   memoryQueryResponseSchema,
   memoryQuerySchema,
+  memoryTextSchema,
+  resolveConflictRequestSchema,
 } from './memory.js';
 export type {
   CreateMemoryRequest,
   CreateMemoryResponse,
   GetMemoryResponse,
   MemoryQueryResponse,
+  ResolveConflictRequest,
 } from './memory.js';
 export {
   SYNC_PROTOCOL_VERSION,
