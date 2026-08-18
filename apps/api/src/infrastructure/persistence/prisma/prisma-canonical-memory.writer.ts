@@ -354,16 +354,40 @@ export class PrismaCanonicalMemoryWriter {
       where: { id: projection.currentFactId },
       include: { memory: true },
     });
-    await tx.currentFact.deleteMany({ where: { memoryId } });
-    await tx.currentFact.create({
-      data: {
-        factId: current.id,
-        memoryId,
-        evidenceId: current.evidenceId,
-        content: current.content,
-        recordedAt: current.memory.recordedAt,
-      },
+    const existingCurrent = await tx.currentFact.findMany({
+      where: { memoryId },
+      select: { factId: true },
     });
+    if (existingCurrent.length > 1) {
+      integrityViolation();
+    }
+
+    const existing = existingCurrent[0];
+    if (!existing) {
+      await tx.currentFact.create({
+        data: {
+          factId: current.id,
+          memoryId,
+          evidenceId: current.evidenceId,
+          content: current.content,
+          recordedAt: current.memory.recordedAt,
+        },
+      });
+    } else {
+      const updated = await tx.$executeRaw`
+        UPDATE "current_facts"
+        SET
+          "fact_id" = ${current.id}::uuid,
+          "evidence_id" = ${current.evidenceId}::uuid,
+          "content" = ${current.content},
+          "recorded_at" = ${current.memory.recordedAt}
+        WHERE "memory_id" = ${memoryId}::uuid
+          AND "fact_id" = ${existing.factId}::uuid
+      `;
+      if (updated !== 1) {
+        integrityViolation();
+      }
+    }
 
     const priorConflict = await tx.syncConflict.findUnique({ where: { memoryId } });
     if (priorConflict?.status === 'OPEN') {
