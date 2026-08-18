@@ -41,7 +41,7 @@ export interface LocalLedgerEventRecord {
   evidenceId: string;
   factId?: string;
   supersedesFactId?: string;
-  type: 'MEMORY_CREATED' | 'MEMORY_CORRECTED';
+  type: 'MEMORY_CREATED' | 'MEMORY_CORRECTED' | 'CONFLICT_RESOLVED';
   reason?: string | null;
   createdAt: Date;
 }
