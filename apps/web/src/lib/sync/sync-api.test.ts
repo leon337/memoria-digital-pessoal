@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
 import type { SyncPushRequest } from '@mdp/contracts';
+import { describe, expect, it, vi } from 'vitest';
 import { SyncApiClient, SyncApiError } from './sync-api.js';
 
 const clientInstanceId = '0198d200-0000-7000-8000-000000000001';
@@ -7,6 +7,13 @@ const memoryId = '0198d200-0000-7000-8000-000000000002';
 const evidenceId = '0198d200-0000-7000-8000-000000000003';
 const eventId = '0198d200-0000-7000-8000-000000000004';
 const factId = '0198d200-0000-7000-8000-000000000005';
+
+function response(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 const pushRequest: SyncPushRequest = {
   protocolVersion: 1,
@@ -61,12 +68,11 @@ const pushRequest: SyncPushRequest = {
 
 describe('SyncApiClient', () => {
   it('serializes push without cache and validates the response contract', async () => {
-    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(
-        JSON.stringify({ protocolVersion: 1, results: [{ eventId, status: 'APPLIED' }] }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    );
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        response({ protocolVersion: 1, results: [{ eventId, status: 'APPLIED' }] }),
+      );
     const client = new SyncApiClient('http://127.0.0.1:3000/', fetchFn);
 
     await expect(client.push(pushRequest)).resolves.toEqual({
@@ -85,32 +91,23 @@ describe('SyncApiClient', () => {
     const fetchFn = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ protocolVersion: 1, events: [], nextCursor: '7', hasMore: false }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
+        response({ protocolVersion: 1, events: [], nextCursor: '7', hasMore: false }),
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            protocolVersion: 1,
-            bootstrapToken: '0198d200-0000-7000-8000-000000000006',
-            highWatermarkCursor: '7',
-            totalRecords: 0,
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
+        response({
+          protocolVersion: 1,
+          bootstrapToken: '0198d200-0000-7000-8000-000000000006',
+          highWatermarkCursor: '7',
+          totalRecords: 0,
+        }),
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            protocolVersion: 1,
-            bootstrapToken: '0198d200-0000-7000-8000-000000000006',
-            records: [],
-            nextOffset: null,
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
+        response({
+          protocolVersion: 1,
+          bootstrapToken: '0198d200-0000-7000-8000-000000000006',
+          records: [],
+          nextOffset: null,
+        }),
       );
     const client = new SyncApiClient('http://127.0.0.1:3000', fetchFn);
 
@@ -139,15 +136,15 @@ describe('SyncApiClient', () => {
 
   it('maps structured sync HTTP errors without leaking an untrusted body', async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(
-        JSON.stringify({
+      response(
+        {
           error: {
             code: 'SYNC_SERVICE_UNAVAILABLE',
             message: 'Synchronization service unavailable',
             requestId: 'request-1',
           },
-        }),
-        { status: 503, headers: { 'Content-Type': 'application/json' } },
+        },
+        503,
       ),
     );
     const client = new SyncApiClient('http://127.0.0.1:3000', fetchFn);
@@ -161,9 +158,9 @@ describe('SyncApiClient', () => {
   });
 
   it('uses a safe generic error for malformed error responses', async () => {
-    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response('<html>database details</html>', { status: 503 }),
-    );
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response('<html>database details</html>', { status: 503 }));
     const client = new SyncApiClient('http://127.0.0.1:3000', fetchFn);
 
     await expect(client.pull('0', 50)).rejects.toMatchObject({
