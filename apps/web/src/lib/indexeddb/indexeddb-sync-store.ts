@@ -564,7 +564,9 @@ export class IndexedDbSyncStore {
     const transaction = db.transaction(['syncConflicts', 'syncOutbox'], 'readonly');
     const done = transactionDone(transaction);
     const [conflicts, outbox] = await Promise.all([
-      requestAsPromise<LocalSyncConflictRecord[]>(transaction.objectStore('syncConflicts').getAll()),
+      requestAsPromise<LocalSyncConflictRecord[]>(
+        transaction.objectStore('syncConflicts').getAll(),
+      ),
       requestAsPromise<LocalSyncOutboxRecord[]>(transaction.objectStore('syncOutbox').getAll()),
     ]);
     await done;
