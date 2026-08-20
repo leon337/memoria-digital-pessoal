@@ -516,6 +516,18 @@ export class IndexedDbSyncStore {
     }
   }
 
+  async discardBootstrap(bootstrapToken: string): Promise<void> {
+    const db = await this.database();
+    const transaction = db.transaction('bootstrapStaging', 'readwrite');
+    const done = transactionDone(transaction);
+    const staging = transaction.objectStore('bootstrapStaging');
+    const keys = await requestAsPromise<IDBValidKey[]>(
+      staging.index('bootstrapToken').getAllKeys(bootstrapToken),
+    );
+    for (const key of keys) staging.delete(key);
+    await done;
+  }
+
   async promoteBootstrap(bootstrapToken: string, watermark: string): Promise<void> {
     const parsedWatermark = syncCursorSchema.safeParse(watermark);
     if (!parsedWatermark.success) throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR');
