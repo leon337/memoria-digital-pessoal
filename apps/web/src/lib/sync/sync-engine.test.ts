@@ -295,7 +295,9 @@ describe('SyncEngine', () => {
     api.push.mockRejectedValue(
       new SyncApiError(503, 'SYNC_SERVICE_UNAVAILABLE', 'temporarily unavailable'),
     );
-    const sleep = vi.fn(async (_delay: number) => undefined);
+    const sleep = vi
+      .fn<(delayMs: number) => Promise<void>>()
+      .mockResolvedValue(undefined);
     const engine = new SyncEngine({
       local,
       api,
