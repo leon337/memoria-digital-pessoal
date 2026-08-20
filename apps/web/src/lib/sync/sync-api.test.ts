@@ -161,9 +161,9 @@ describe('SyncApiClient', () => {
   });
 
   it('uses a safe generic error for malformed error responses', async () => {
-    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response('<html>database details</html>', { status: 503 }),
-    );
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response('<html>database details</html>', { status: 503 }));
     const client = new SyncApiClient('http://127.0.0.1:3000', fetchFn);
 
     await expect(client.pull('0', 50)).rejects.toMatchObject({
