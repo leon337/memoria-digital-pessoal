@@ -16,7 +16,11 @@ export function computeRetryDelay(attempt: number, random: () => number = Math.r
 
 export function classifySyncFailure(error: unknown): SyncFailureClassification {
   if (error instanceof TypeError) return 'TRANSIENT';
-  if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') {
+  if (
+    typeof DOMException !== 'undefined' &&
+    error instanceof DOMException &&
+    error.name === 'AbortError'
+  ) {
     return 'TRANSIENT';
   }
 
