@@ -88,9 +88,7 @@ describe('IndexedDbSyncStore operational queue', () => {
       '0198d200-0000-7000-8000-000000000001',
       '0198d200-0000-7000-8000-000000000002',
     ]);
-    expect(first.map((row) => row.eventId)).toEqual([
-      '0198d200-0000-7000-8000-000000000001',
-    ]);
+    expect(first.map((row) => row.eventId)).toEqual(['0198d200-0000-7000-8000-000000000001']);
   });
 
   it('reports global status with conflict then blocked then pending precedence', async () => {
