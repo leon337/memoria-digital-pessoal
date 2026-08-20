@@ -381,6 +381,27 @@ export class IndexedDbSyncStore {
     return parsed.data;
   }
 
+  async listPending(limit: number, now: Date): Promise<LocalSyncOutboxRecord[]> {
+    const db = await this.database();
+    const transaction = db.transaction('syncOutbox', 'readonly');
+    const done = transactionDone(transaction);
+    const rows = await requestAsPromise<LocalSyncOutboxRecord[]>(
+      transaction.objectStore('syncOutbox').getAll(),
+    );
+    await done;
+
+    return rows
+      .filter(
+        (row) =>
+          row.status === 'PENDING' ||
+          (row.status === 'RETRY_WAIT' &&
+            row.nextAttemptAt !== null &&
+            row.nextAttemptAt.getTime() <= now.getTime()),
+      )
+      .sort((left, right) => left.eventId.localeCompare(right.eventId))
+      .slice(0, Math.max(0, limit));
+  }
+
   async applyPushResults(results: SyncPushEventResult[], now: Date): Promise<void> {
     void now;
     const db = await this.database();
@@ -536,6 +557,22 @@ export class IndexedDbSyncStore {
       if (error instanceof MemoryRepositoryError) throw error;
       throw new MemoryRepositoryError('LOCAL_DATA_INTEGRITY_ERROR', error);
     }
+  }
+
+  async getGlobalStatus(): Promise<LocalMemorySyncStatus> {
+    const db = await this.database();
+    const transaction = db.transaction(['syncConflicts', 'syncOutbox'], 'readonly');
+    const done = transactionDone(transaction);
+    const [conflicts, outbox] = await Promise.all([
+      requestAsPromise<LocalSyncConflictRecord[]>(transaction.objectStore('syncConflicts').getAll()),
+      requestAsPromise<LocalSyncOutboxRecord[]>(transaction.objectStore('syncOutbox').getAll()),
+    ]);
+    await done;
+
+    if (conflicts.some((conflict) => conflict.status === 'OPEN')) return 'CONFLICT';
+    if (outbox.some((row) => row.status === 'BLOCKED')) return 'BLOCKED';
+    if (outbox.length > 0) return 'PENDING';
+    return 'SYNCED';
   }
 
   async getMemoryStatus(memoryId: string): Promise<LocalMemorySyncStatus> {
