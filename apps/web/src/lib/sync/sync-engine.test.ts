@@ -200,7 +200,10 @@ describe('SyncEngine', () => {
 
   it('pulls dependencies and retries a DEPENDENCY_MISSING event on the next round', async () => {
     const local = createLocalStore();
-    local.listPending.mockResolvedValueOnce([pending]).mockResolvedValueOnce([pending]).mockResolvedValue([]);
+    local.listPending
+      .mockResolvedValueOnce([pending])
+      .mockResolvedValueOnce([pending])
+      .mockResolvedValue([]);
     local.getConfirmedCursor.mockResolvedValue('0');
     const api = createApi();
     api.push
@@ -292,7 +295,7 @@ describe('SyncEngine', () => {
     api.push.mockRejectedValue(
       new SyncApiError(503, 'SYNC_SERVICE_UNAVAILABLE', 'temporarily unavailable'),
     );
-    const sleep = vi.fn(async () => undefined);
+    const sleep = vi.fn(async (_delay: number) => undefined);
     const engine = new SyncEngine({
       local,
       api,
