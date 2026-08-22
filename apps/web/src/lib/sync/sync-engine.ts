@@ -17,11 +17,7 @@ import { MAX_FOREGROUND_RETRIES, classifySyncFailure, computeRetryDelay } from '
 
 export type SyncReason = 'startup' | 'online' | 'manual';
 
-export type SyncRuntimeStatus =
-  | LocalMemorySyncStatus
-  | 'OFFLINE'
-  | 'SYNCING'
-  | 'ERROR';
+export type SyncRuntimeStatus = LocalMemorySyncStatus | 'OFFLINE' | 'SYNCING' | 'ERROR';
 
 export interface SyncRuntimeState {
   status: SyncRuntimeStatus;

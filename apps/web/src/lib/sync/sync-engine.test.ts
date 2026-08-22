@@ -105,16 +105,20 @@ function createLocalStore() {
       .fn<SyncEngineLocalStore['getOrCreateClientInstanceId']>()
       .mockResolvedValue(clientInstanceId),
     listPending: vi.fn<SyncEngineLocalStore['listPending']>().mockResolvedValue([]),
-    applyPushResults: vi.fn<SyncEngineLocalStore['applyPushResults']>().mockResolvedValue(undefined),
+    applyPushResults: vi
+      .fn<SyncEngineLocalStore['applyPushResults']>()
+      .mockResolvedValue(undefined),
     applyPullPage: vi.fn<SyncEngineLocalStore['applyPullPage']>().mockResolvedValue(undefined),
     stageBootstrapPage: vi
       .fn<SyncEngineLocalStore['stageBootstrapPage']>()
       .mockResolvedValue(undefined),
-    promoteBootstrap: vi.fn<SyncEngineLocalStore['promoteBootstrap']>().mockResolvedValue(undefined),
-    discardBootstrap: vi.fn<SyncEngineLocalStore['discardBootstrap']>().mockResolvedValue(undefined),
-    getGlobalStatus: vi
-      .fn<SyncEngineLocalStore['getGlobalStatus']>()
-      .mockResolvedValue('SYNCED'),
+    promoteBootstrap: vi
+      .fn<SyncEngineLocalStore['promoteBootstrap']>()
+      .mockResolvedValue(undefined),
+    discardBootstrap: vi
+      .fn<SyncEngineLocalStore['discardBootstrap']>()
+      .mockResolvedValue(undefined),
+    getGlobalStatus: vi.fn<SyncEngineLocalStore['getGlobalStatus']>().mockResolvedValue('SYNCED'),
   };
 }
 
@@ -124,9 +128,7 @@ function createApi() {
       .fn<SyncEngineApi['push']>()
       .mockResolvedValue({ protocolVersion: 1, results: [] } satisfies SyncPushResponse),
     pull: vi.fn<SyncEngineApi['pull']>().mockResolvedValue(emptyPull()),
-    startBootstrap: vi
-      .fn<SyncEngineApi['startBootstrap']>()
-      .mockResolvedValue(bootstrapStart()),
+    startBootstrap: vi.fn<SyncEngineApi['startBootstrap']>().mockResolvedValue(bootstrapStart()),
     readBootstrapPage: vi
       .fn<SyncEngineApi['readBootstrapPage']>()
       .mockResolvedValue(bootstrapPage()),
@@ -194,7 +196,9 @@ describe('SyncEngine', () => {
       [{ eventId, status: 'APPLIED' }],
       expect.any(Date),
     );
-    expect(api.pull.mock.invocationCallOrder[0]).toBeGreaterThan(api.push.mock.invocationCallOrder[0]!);
+    expect(api.pull.mock.invocationCallOrder[0]).toBeGreaterThan(
+      api.push.mock.invocationCallOrder[0]!,
+    );
     expect(local.getGlobalStatus).toHaveBeenCalledTimes(1);
   });
 
@@ -228,7 +232,9 @@ describe('SyncEngine', () => {
 
     expect(api.push).toHaveBeenCalledTimes(2);
     expect(api.pull).toHaveBeenCalledTimes(3);
-    expect(api.pull.mock.invocationCallOrder[0]).toBeLessThan(api.push.mock.invocationCallOrder[1]!);
+    expect(api.pull.mock.invocationCallOrder[0]).toBeLessThan(
+      api.push.mock.invocationCallOrder[1]!,
+    );
   });
 
   it('rebootstraps safely when the pull cursor expires', async () => {
@@ -255,9 +261,7 @@ describe('SyncEngine', () => {
       .mockResolvedValueOnce(bootstrapStart(bootstrapToken, '5'))
       .mockResolvedValueOnce(bootstrapStart(replacementBootstrapToken, '7'));
     api.readBootstrapPage
-      .mockRejectedValueOnce(
-        new SyncApiError(410, 'SYNC_BOOTSTRAP_EXPIRED', 'bootstrap expired'),
-      )
+      .mockRejectedValueOnce(new SyncApiError(410, 'SYNC_BOOTSTRAP_EXPIRED', 'bootstrap expired'))
       .mockResolvedValueOnce(bootstrapPage(replacementBootstrapToken));
     api.pull.mockResolvedValue(emptyPull('7'));
     const engine = new SyncEngine({ local, api, online: () => true });
@@ -295,9 +299,7 @@ describe('SyncEngine', () => {
     api.push.mockRejectedValue(
       new SyncApiError(503, 'SYNC_SERVICE_UNAVAILABLE', 'temporarily unavailable'),
     );
-    const sleep = vi
-      .fn<(delayMs: number) => Promise<void>>()
-      .mockResolvedValue(undefined);
+    const sleep = vi.fn<(delayMs: number) => Promise<void>>().mockResolvedValue(undefined);
     const engine = new SyncEngine({
       local,
       api,
