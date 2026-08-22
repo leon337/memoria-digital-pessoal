@@ -12,7 +12,10 @@ function repository(overrides: Partial<MemoryRepository> = {}): MemoryRepository
   return {
     ready: vi.fn().mockResolvedValue(undefined),
     create: vi.fn().mockResolvedValue({
-      memory: { id: '0198d400-0000-7000-8000-000000000001', recordedAt: '2026-08-22T14:30:00.000Z' },
+      memory: {
+        id: '0198d400-0000-7000-8000-000000000001',
+        recordedAt: '2026-08-22T14:30:00.000Z',
+      },
       fact: { id: '0198d400-0000-7000-8000-000000000002', content: 'Registro sintético.' },
       provenance: { evidenceId: '0198d400-0000-7000-8000-000000000003' },
     }),
