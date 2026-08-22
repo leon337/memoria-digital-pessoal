@@ -1,7 +1,9 @@
+import type { SyncEventEnvelope } from '@mdp/contracts';
 import {
   CorrectionDomainError,
   createTextCorrectionRecord,
   orderTextFactHistory,
+  type TextCorrectionRecord,
   type TextMemoryRecord,
 } from '@mdp/domain';
 import { MemoryInvariantError } from '../../../memories/memory.errors.js';
@@ -14,6 +16,10 @@ import {
   type StoredMemory,
   type StoredMemoryHistory,
 } from '../../../memories/memory.store.js';
+import {
+  normalizeEnvelope,
+  PrismaCanonicalMemoryWriter,
+} from './prisma-canonical-memory.writer.js';
 import { PrismaService } from './prisma.service.js';
 
 interface QueryHitRow {
@@ -37,6 +43,100 @@ const unavailableCodes = new Set([
   '57P02',
   '57P03',
 ]);
+
+function envelopeForCreate(record: TextMemoryRecord): SyncEventEnvelope {
+  return normalizeEnvelope({
+    protocolVersion: 1,
+    eventId: record.event.id,
+    eventType: 'MEMORY_CREATED',
+    memoryId: record.memory.id,
+    predecessorFactIds: [],
+    records: [
+      {
+        kind: 'memory',
+        id: record.memory.id,
+        recordedAt: record.memory.recordedAt.toISOString(),
+        occurredAt: null,
+        temporalPrecision: record.memory.temporalPrecision,
+      },
+      {
+        kind: 'evidence',
+        id: record.evidence.id,
+        memoryId: record.evidence.memoryId,
+        evidenceKind: record.evidence.kind,
+        content: record.evidence.content,
+        createdAt: record.evidence.createdAt.toISOString(),
+      },
+      {
+        kind: 'ledgerEvent',
+        id: record.event.id,
+        memoryId: record.event.memoryId,
+        evidenceId: record.event.evidenceId,
+        factId: null,
+        supersedesFactId: null,
+        eventType: record.event.type,
+        reason: null,
+        createdAt: record.event.createdAt.toISOString(),
+      },
+      {
+        kind: 'fact',
+        id: record.fact.id,
+        memoryId: record.fact.memoryId,
+        evidenceId: record.fact.evidenceId,
+        factKind: record.fact.kind,
+        content: record.fact.content,
+        createdAt: record.fact.createdAt.toISOString(),
+      },
+    ],
+  });
+}
+
+function envelopeForCorrection(record: TextCorrectionRecord): SyncEventEnvelope {
+  return normalizeEnvelope({
+    protocolVersion: 1,
+    eventId: record.event.id,
+    eventType: 'MEMORY_CORRECTED',
+    memoryId: record.event.memoryId,
+    predecessorFactIds: [record.event.supersedesFactId],
+    records: [
+      {
+        kind: 'evidence',
+        id: record.evidence.id,
+        memoryId: record.evidence.memoryId,
+        evidenceKind: record.evidence.kind,
+        content: record.evidence.content,
+        createdAt: record.evidence.createdAt.toISOString(),
+      },
+      {
+        kind: 'ledgerEvent',
+        id: record.event.id,
+        memoryId: record.event.memoryId,
+        evidenceId: record.event.evidenceId,
+        factId: record.event.factId,
+        supersedesFactId: record.event.supersedesFactId,
+        eventType: record.event.type,
+        reason: record.event.reason,
+        createdAt: record.event.createdAt.toISOString(),
+      },
+      {
+        kind: 'fact',
+        id: record.fact.id,
+        memoryId: record.fact.memoryId,
+        evidenceId: record.fact.evidenceId,
+        factKind: record.fact.kind,
+        content: record.fact.content,
+        createdAt: record.fact.createdAt.toISOString(),
+      },
+      {
+        kind: 'factRelation',
+        memoryId: record.event.memoryId,
+        predecessorFactId: record.event.supersedesFactId,
+        successorFactId: record.fact.id,
+        relationType: 'SUPERSEDES',
+      },
+    ],
+  });
+}
 
 function isPersistenceUnavailable(error: unknown, depth = 0): boolean {
   if (depth > 4 || !error || typeof error !== 'object') {
@@ -63,58 +163,17 @@ function isPersistenceUnavailable(error: unknown, depth = 0): boolean {
 }
 
 export class PrismaMemoryStore implements MemoryStore {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly writer = new PrismaCanonicalMemoryWriter(),
+  ) {}
 
   async create(record: TextMemoryRecord): Promise<void> {
     return this.withAvailabilityMapping(async () => {
       await this.prisma.run(async (client) => {
-        await client.$transaction(async (tx) => {
-          await tx.memory.create({
-            data: {
-              id: record.memory.id,
-              recordedAt: record.memory.recordedAt,
-              occurredAt: record.memory.occurredAt,
-              temporalPrecision: record.memory.temporalPrecision,
-            },
-          });
-          await tx.evidence.create({
-            data: {
-              id: record.evidence.id,
-              memoryId: record.evidence.memoryId,
-              kind: record.evidence.kind,
-              content: record.evidence.content,
-              createdAt: record.evidence.createdAt,
-            },
-          });
-          await tx.ledgerEvent.create({
-            data: {
-              id: record.event.id,
-              memoryId: record.event.memoryId,
-              evidenceId: record.event.evidenceId,
-              type: record.event.type,
-              createdAt: record.event.createdAt,
-            },
-          });
-          await tx.fact.create({
-            data: {
-              id: record.fact.id,
-              memoryId: record.fact.memoryId,
-              evidenceId: record.fact.evidenceId,
-              kind: record.fact.kind,
-              content: record.fact.content,
-              createdAt: record.fact.createdAt,
-            },
-          });
-          await tx.currentFact.create({
-            data: {
-              factId: record.currentFact.factId,
-              memoryId: record.currentFact.memoryId,
-              evidenceId: record.currentFact.evidenceId,
-              content: record.currentFact.content,
-              recordedAt: record.currentFact.recordedAt,
-            },
-          });
-        });
+        await client.$transaction((tx) =>
+          this.writer.writeEnvelope(tx, envelopeForCreate(record), null),
+        );
       });
     });
   }
@@ -231,25 +290,7 @@ export class PrismaMemoryStore implements MemoryStore {
             ids: input.ids,
           });
 
-          await tx.evidence.create({ data: record.evidence });
-          await tx.fact.create({ data: record.fact });
-          await tx.ledgerEvent.create({ data: record.event });
-
-          const changed = await tx.$executeRaw`
-            UPDATE current_facts
-            SET
-              fact_id = ${record.currentFact.factId}::uuid,
-              evidence_id = ${record.currentFact.evidenceId}::uuid,
-              content = ${record.currentFact.content}
-            WHERE fact_id = ${current.factId}::uuid
-              AND memory_id = ${input.memoryId}::uuid
-          `;
-          if (changed !== 1) {
-            throw new MemoryInvariantError(
-              'current projection update did not affect exactly one row',
-            );
-          }
-
+          await this.writer.writeEnvelope(tx, envelopeForCorrection(record), null);
           return { status: 'CORRECTED' as const, record };
         }),
       ),

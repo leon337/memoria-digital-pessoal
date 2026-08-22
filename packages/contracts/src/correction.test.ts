@@ -55,7 +55,7 @@ it('parses a correction response', () => {
   expect(parsed.correction.supersedesFactId).toBe('f1');
 });
 
-it('requires a non-empty history', () => {
+it('requires graph-aware predecessor sets in non-empty history', () => {
   const version = {
     factId: 'f1',
     evidenceId: 'e1',
@@ -65,13 +65,20 @@ it('requires a non-empty history', () => {
     isOriginal: true,
     isCurrent: true,
     supersedesFactId: null,
+    predecessorFactIds: [],
     eventId: 'ev1',
   };
 
   expect(
-    memoryHistoryResponseSchema.parse({ memoryId: 'm1', versions: [version] }).versions,
-  ).toHaveLength(1);
+    memoryHistoryResponseSchema.parse({ memoryId: 'm1', versions: [version] }).versions[0],
+  ).toMatchObject({ predecessorFactIds: [], supersedesFactId: null });
   expect(memoryHistoryResponseSchema.safeParse({ memoryId: 'm1', versions: [] }).success).toBe(
     false,
   );
+  expect(
+    memoryHistoryResponseSchema.safeParse({
+      memoryId: 'm1',
+      versions: [{ ...version, predecessorFactIds: undefined }],
+    }).success,
+  ).toBe(false);
 });

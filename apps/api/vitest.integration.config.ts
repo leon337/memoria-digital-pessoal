@@ -5,5 +5,6 @@ export default defineProject({
     name: 'api-integration',
     environment: 'node',
     include: ['src/**/*.integration.test.ts'],
+    fileParallelism: false,
   },
 });

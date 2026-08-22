@@ -14,22 +14,25 @@ async function dependencies(path: string): Promise<string[]> {
 }
 
 describe('Slice 02 scope invariants', () => {
-  it('keeps exactly five product models while adding correction lineage fields', async () => {
+  it('preserves the five base models and correction lineage fields', async () => {
     const schema = await text('prisma/schema.prisma');
-    const models = [...schema.matchAll(/^model\s+(\w+)\s+\{/gm)].map((match) => match[1]).sort();
+    const models = new Set([...schema.matchAll(/^model\s+(\w+)\s+\{/gm)].map((match) => match[1]));
 
-    expect(models).toEqual(['CurrentFact', 'Evidence', 'Fact', 'LedgerEvent', 'Memory']);
+    for (const model of ['CurrentFact', 'Evidence', 'Fact', 'LedgerEvent', 'Memory']) {
+      expect(models.has(model)).toBe(true);
+    }
     expect(schema).toContain('supersedesFactId');
     expect(schema).toContain('@relation("FactSupersession"');
     expect(schema).toContain('reason');
     expect(schema).not.toContain('model FactVersion');
   });
 
-  it('requires database fork prevention and correction-event fact links', async () => {
+  it('requires database fork prevention and correction-event fact links at the Slice 02 boundary', async () => {
     const migration = await text(
       'prisma/migrations/20260817000100_slice_02_correction_history/migration.sql',
     );
 
+    expect(migration).not.toMatch(/CREATE TABLE/i);
     expect(migration).toContain('CREATE UNIQUE INDEX "facts_supersedes_fact_id_key"');
     expect(migration).toContain('ledger_events_memory_corrected_fact_links_check');
     expect(migration).toContain('"type" <> \'MEMORY_CORRECTED\'');

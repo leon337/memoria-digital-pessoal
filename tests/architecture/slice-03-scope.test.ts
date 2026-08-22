@@ -36,7 +36,7 @@ describe('Slice 03 scope invariants', () => {
     }
   });
 
-  it('keeps the active web memory path local-only while retaining the HTTP client only for regression/future sync', async () => {
+  it('keeps active memory writes behind the local repository while allowing later sync transport', async () => {
     const activePaths = [
       'apps/web/src/App.tsx',
       'apps/web/src/main.tsx',
@@ -47,16 +47,16 @@ describe('Slice 03 scope invariants', () => {
     const active = (await Promise.all(activePaths.map(text))).join('\n');
 
     expect(active).not.toContain('memory-api');
-    expect(active).not.toContain('apiBaseUrl');
     expect(active).toContain('MemoryRepository');
     expect(await exists('apps/web/src/lib/memory-api.ts')).toBe(true);
   });
 
-  it('freezes the local database identity and five-store versioned migration boundary', async () => {
+  it('preserves the local database identity and five canonical Slice 03 stores across later migrations', async () => {
     const db = await text('apps/web/src/lib/indexeddb/mdp-local-db.ts');
+    const version = db.match(/MDP_LOCAL_DB_VERSION = (\d+)/)?.[1];
 
     expect(db).toContain("MDP_LOCAL_DB_NAME = 'mdp-local'");
-    expect(db).toContain('MDP_LOCAL_DB_VERSION = 2');
+    expect(Number(version)).toBeGreaterThanOrEqual(2);
     for (const store of ['memories', 'evidence', 'ledgerEvents', 'facts', 'currentFacts']) {
       expect(db).toContain(`'${store}'`);
     }

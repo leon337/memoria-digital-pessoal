@@ -14,11 +14,15 @@ async function dependencies(path: string): Promise<string[]> {
 }
 
 describe('Slice 01 scope invariants', () => {
-  it('contains exactly the five authorized product models', async () => {
-    const schema = await text('prisma/schema.prisma');
-    const models = [...schema.matchAll(/^model\s+(\w+)\s+\{/gm)].map((match) => match[1]).sort();
+  it('created exactly the five authorized product tables at the Slice 01 boundary', async () => {
+    const migration = await text(
+      'prisma/migrations/20260816000200_slice_01_trusted_text_memory/migration.sql',
+    );
+    const tables = [...migration.matchAll(/CREATE TABLE "([^"]+)"/g)]
+      .map((match) => match[1])
+      .sort();
 
-    expect(models).toEqual(['CurrentFact', 'Evidence', 'Fact', 'LedgerEvent', 'Memory']);
+    expect(tables).toEqual(['current_facts', 'evidence', 'facts', 'ledger_events', 'memories']);
   });
 
   it('does not add out-of-scope infrastructure or AI dependencies', async () => {

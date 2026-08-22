@@ -2,10 +2,17 @@ import { useEffect, useState } from 'react';
 import { QueryMemoryForm } from './features/memory/QueryMemoryForm.js';
 import { StoreMemoryForm } from './features/memory/StoreMemoryForm.js';
 import { PwaUpdateNotice } from './features/pwa/PwaUpdateNotice.js';
+import { SyncStatus } from './features/sync/SyncStatus.js';
 import type { MemoryRepository } from './lib/memory-repository.js';
+import type { SyncEngine } from './lib/sync/sync-engine.js';
 import { useConnectivity } from './lib/use-connectivity.js';
 
-export function App({ repository }: { repository: MemoryRepository }) {
+interface AppProps {
+  repository: MemoryRepository;
+  syncEngine?: SyncEngine;
+}
+
+export function App({ repository, syncEngine }: AppProps) {
   const [status, setStatus] = useState<'checking' | 'ready' | 'unavailable'>('checking');
   const connectivity = useConnectivity();
 
@@ -24,6 +31,14 @@ export function App({ repository }: { repository: MemoryRepository }) {
       active = false;
     };
   }, [repository]);
+
+  useEffect(() => {
+    if (!syncEngine) return;
+    if (navigator.onLine) void syncEngine.synchronize('startup').catch(() => undefined);
+    const onOnline = () => void syncEngine.synchronize('online').catch(() => undefined);
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [syncEngine]);
 
   const readinessText =
     status === 'checking'
@@ -51,6 +66,7 @@ export function App({ repository }: { repository: MemoryRepository }) {
       </header>
 
       <PwaUpdateNotice />
+      {syncEngine ? <SyncStatus engine={syncEngine} /> : null}
 
       <div className="memory-grid">
         <StoreMemoryForm repository={repository} enabled={enabled} />

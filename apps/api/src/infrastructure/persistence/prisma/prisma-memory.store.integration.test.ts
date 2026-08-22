@@ -37,13 +37,18 @@ function correctionIds() {
 
 async function clearProductTables(): Promise<void> {
   await prisma.run(async (client) => {
-    await client.$transaction([
-      client.currentFact.deleteMany(),
-      client.ledgerEvent.deleteMany(),
-      client.fact.deleteMany(),
-      client.evidence.deleteMany(),
-      client.memory.deleteMany(),
-    ]);
+    await client.$transaction(async (tx) => {
+      await tx.syncOutbox.deleteMany();
+      await tx.syncConflict.deleteMany();
+      await tx.syncBootstrapSnapshot.deleteMany();
+      await tx.factRelation.deleteMany();
+      await tx.currentFact.deleteMany();
+      await tx.ledgerEvent.deleteMany();
+      await tx.fact.deleteMany();
+      await tx.evidence.deleteMany();
+      await tx.memory.deleteMany();
+      await tx.syncFeedState.update({ where: { id: 1 }, data: { currentSequence: 0n } });
+    });
   });
 }
 
@@ -97,6 +102,7 @@ describe('PrismaMemoryStore integration', () => {
         where: { factId: record.fact.id },
       }),
       event: await client.ledgerEvent.findUniqueOrThrow({ where: { id: record.event.id } }),
+      outbox: await client.syncOutbox.findUnique({ where: { eventId: record.event.id } }),
     }));
 
     expect(persisted.evidence.content).toBe('  Minha irmã se chama Ana.  ');
@@ -104,6 +110,12 @@ describe('PrismaMemoryStore integration', () => {
     expect(persisted.currentFact.content).toBe(persisted.fact.content);
     expect(persisted.event.type).toBe('MEMORY_CREATED');
     expect(persisted.event.evidenceId).toBe(persisted.evidence.id);
+    expect(persisted.outbox).toMatchObject({
+      eventId: record.event.id,
+      eventType: 'MEMORY_CREATED',
+      memoryId: record.memory.id,
+      originClientInstanceId: null,
+    });
   });
 
   it('rolls back every record when the final projection insert fails', async () => {
@@ -214,6 +226,26 @@ describe('PrismaMemoryStore integration', () => {
       memoryId: original.memory.id,
       content: 'Texto corrigido.',
       recordedAt: original.memory.recordedAt,
+    });
+
+    if (result.status !== 'CORRECTED') {
+      throw new Error('expected corrected result');
+    }
+    const relation = await prisma.run((client) =>
+      client.factRelation.findUnique({
+        where: {
+          predecessorFactId_successorFactId: {
+            predecessorFactId: original.fact.id,
+            successorFactId: result.record.fact.id,
+          },
+        },
+      }),
+    );
+    expect(relation).toMatchObject({
+      memoryId: original.memory.id,
+      predecessorFactId: original.fact.id,
+      successorFactId: result.record.fact.id,
+      relationType: 'SUPERSEDES',
     });
 
     const unchanged = await prisma.run(async (client) => ({

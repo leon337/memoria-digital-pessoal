@@ -51,10 +51,11 @@ assert(
 const index = readFileSync(join(dist, 'index.html'), 'utf8');
 assert(index.includes('manifest.webmanifest'), 'index.html must reference generated manifest');
 
-const javascript = walk(dist)
-  .filter((path) => path.endsWith('.js'))
-  .map((path) => readFileSync(path, 'utf8'))
-  .join('\n');
+const serviceWorkerFiles = walk(dist).filter((path) => {
+  const filename = path.split('/').at(-1) ?? '';
+  return filename === 'sw.js' || filename.startsWith('workbox-');
+});
+const serviceWorkerCode = serviceWorkerFiles.map((path) => readFileSync(path, 'utf8')).join('\n');
 
 for (const forbidden of [
   'http://127.0.0.1:3000',
@@ -63,7 +64,7 @@ for (const forbidden of [
   'workbox-background-sync',
 ]) {
   assert(
-    !javascript.includes(forbidden),
+    !serviceWorkerCode.includes(forbidden),
     `forbidden Service Worker/API cache marker: ${forbidden}`,
   );
 }

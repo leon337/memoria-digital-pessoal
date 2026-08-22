@@ -5,7 +5,11 @@ import {
   memoryQuerySchema,
   MEMORY_QUERY_MAX_LENGTH,
   MEMORY_TEXT_MAX_LENGTH,
+  resolveConflictRequestSchema,
 } from './memory.js';
+
+const candidateB = '018f47a6-62f1-7f36-8c2f-3b17d0878d4a';
+const candidateC = '018f47a6-62f2-7c4a-8f1d-24b57980731a';
 
 describe('memory contracts', () => {
   it('accepts the exact memory limit and preserves valid surrounding whitespace', () => {
@@ -36,7 +40,7 @@ describe('memory contracts', () => {
     expect(() => memoryQuerySchema.parse('x'.repeat(MEMORY_QUERY_MAX_LENGTH + 1))).toThrow();
   });
 
-  it('accepts only coherent FOUND or UNKNOWN response shapes', () => {
+  it('accepts coherent FOUND, UNKNOWN, or explicit CONFLICT response shapes', () => {
     expect(
       memoryQueryResponseSchema.parse({
         status: 'UNKNOWN',
@@ -57,11 +61,52 @@ describe('memory contracts', () => {
       }).status,
     ).toBe('FOUND');
 
+    expect(
+      memoryQueryResponseSchema.parse({
+        status: 'CONFLICT',
+        answer: null,
+        provenance: null,
+        conflict: {
+          memoryId: 'memory-id',
+          baseline: {
+            factId: 'fact-a',
+            evidenceId: 'evidence-a',
+            content: 'Versão A',
+          },
+          candidates: [
+            { factId: 'fact-b', evidenceId: 'evidence-b', content: 'Versão B' },
+            { factId: 'fact-c', evidenceId: 'evidence-c', content: 'Versão C' },
+          ],
+        },
+      }).status,
+    ).toBe('CONFLICT');
+
     expect(() =>
       memoryQueryResponseSchema.parse({
         status: 'FOUND',
         answer: null,
         provenance: null,
+      }),
+    ).toThrow();
+  });
+
+  it('normalizes a conflict resolution request and requires distinct UUID candidates', () => {
+    expect(
+      resolveConflictRequestSchema.parse({
+        expectedCandidateFactIds: [candidateC, candidateB],
+        text: '  Versão confirmada.  ',
+        reason: '  confirmação humana  ',
+      }),
+    ).toEqual({
+      expectedCandidateFactIds: [candidateC, candidateB],
+      text: 'Versão confirmada.',
+      reason: 'confirmação humana',
+    });
+
+    expect(() =>
+      resolveConflictRequestSchema.parse({
+        expectedCandidateFactIds: [candidateB, candidateB],
+        text: 'Versão confirmada.',
       }),
     ).toThrow();
   });
