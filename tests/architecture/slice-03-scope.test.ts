@@ -36,7 +36,7 @@ describe('Slice 03 scope invariants', () => {
     }
   });
 
-  it('keeps the active web memory path local-only while retaining the HTTP client only for regression/future sync', async () => {
+  it('keeps active memory writes behind the local repository while allowing later sync transport', async () => {
     const activePaths = [
       'apps/web/src/App.tsx',
       'apps/web/src/main.tsx',
@@ -47,7 +47,6 @@ describe('Slice 03 scope invariants', () => {
     const active = (await Promise.all(activePaths.map(text))).join('\n');
 
     expect(active).not.toContain('memory-api');
-    expect(active).not.toContain('apiBaseUrl');
     expect(active).toContain('MemoryRepository');
     expect(await exists('apps/web/src/lib/memory-api.ts')).toBe(true);
   });
