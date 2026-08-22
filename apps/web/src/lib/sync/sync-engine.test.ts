@@ -287,7 +287,7 @@ describe('SyncEngine', () => {
     const second = engine.synchronize('online');
 
     expect(second).toBe(first);
-    expect(api.pull).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(api.pull).toHaveBeenCalledTimes(1));
     resolvePull(emptyPull());
     await first;
   });
