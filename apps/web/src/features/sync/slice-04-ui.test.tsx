@@ -102,7 +102,9 @@ describe('Slice 04 synchronization UI contract', () => {
     await user.type(screen.getByLabelText('Palavra ou frase'), 'Versão');
     await user.click(screen.getByRole('button', { name: 'Consultar' }));
 
-    expect(await screen.findByText(/Conflito/i)).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: /Conflito na lembrança/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Versão B')).toBeInTheDocument();
     expect(screen.getByText('Versão C')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Resolver conflito/i })).toBeInTheDocument();
