@@ -1,6 +1,7 @@
 import { MEMORY_QUERY_MAX_LENGTH, type MemoryQueryResponse } from '@mdp/contracts';
 import { useState, type FormEvent } from 'react';
 import { MemoryRepositoryError, type MemoryRepository } from '../../lib/memory-repository.js';
+import { ConflictResolutionPanel } from '../sync/ConflictResolutionPanel.js';
 import { MemoryFoundResult } from './MemoryFoundResult.js';
 
 export function QueryMemoryForm({
@@ -69,6 +70,13 @@ export function QueryMemoryForm({
 
       {result?.status === 'FOUND' ? (
         <MemoryFoundResult repository={repository} result={result} onCurrentChange={setResult} />
+      ) : null}
+      {result?.status === 'CONFLICT' ? (
+        <ConflictResolutionPanel
+          repository={repository}
+          conflict={result.conflict}
+          onResolved={setResult}
+        />
       ) : null}
       {result?.status === 'UNKNOWN' ? (
         <p role="status" aria-live="polite" className="feedback">
