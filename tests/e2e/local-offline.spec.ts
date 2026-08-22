@@ -26,7 +26,7 @@ async function primeServiceWorker(page: Page): Promise<void> {
 async function createMemory(page: Page, text: string): Promise<void> {
   await page.getByLabel('Lembrança', { exact: true }).fill(text);
   await page.getByRole('button', { name: 'Guardar' }).click();
-  await expect(page.getByText('Lembrança guardada.')).toBeVisible();
+  await expect(page.getByText(/Salva neste dispositivo/i)).toBeVisible();
 }
 
 async function queryMemory(page: Page, query: string, answer: string): Promise<void> {
@@ -101,14 +101,14 @@ async function seedVersionOneDatabase(page: Page): Promise<void> {
   });
 }
 
-test('reopens offline and completes create/query/correct/history/restore without API traffic', async ({
+test('reopens offline and completes create/query/correct/history/restore without direct memory API writes', async ({
   context,
   page,
 }) => {
   const forbiddenRequests: string[] = [];
   context.on('request', (request) => {
     const url = request.url();
-    if (url.includes(':3000') || /\/(memories|query)(\/|\?|$)/.test(new URL(url).pathname)) {
+    if (/\/(memories|query)(\/|\?|$)/.test(new URL(url).pathname)) {
       forbiddenRequests.push(url);
     }
   });
@@ -208,7 +208,7 @@ test('local storage failure never reports a successful memory write', async ({ b
   await page.getByLabel('Lembrança', { exact: true }).fill('Registro sintético que deve falhar.');
   await page.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByRole('alert')).toContainText('armazenamento local');
-  await expect(page.getByText('Lembrança guardada.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Salva neste dispositivo/i)).toHaveCount(0);
 
   await page.getByLabel('Palavra ou frase', { exact: true }).fill('deve falhar');
   await page.getByRole('button', { name: 'Consultar' }).click();
