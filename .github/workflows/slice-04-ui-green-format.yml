@@ -1,0 +1,39 @@
+name: Slice 04 UI Green Format
+
+on:
+  push:
+    branches:
+      - slice/04-synchronization
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Format Task 16 files
+        run: >-
+          pnpm exec prettier
+          apps/web/src/App.tsx
+          apps/web/src/main.tsx
+          apps/web/src/features/memory/StoreMemoryForm.tsx
+          apps/web/src/features/memory/QueryMemoryForm.tsx
+          apps/web/src/features/sync/ConflictResolutionPanel.tsx
+          apps/web/src/features/sync/SyncStatus.tsx
+          apps/web/src/lib/sync/use-sync-state.ts
+          --write
+      - name: Commit formatting if needed
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/App.tsx apps/web/src/main.tsx apps/web/src/features/memory/StoreMemoryForm.tsx apps/web/src/features/memory/QueryMemoryForm.tsx apps/web/src/features/sync/ConflictResolutionPanel.tsx apps/web/src/features/sync/SyncStatus.tsx apps/web/src/lib/sync/use-sync-state.ts
+          git commit -m "style(slice-04): format synchronization UI"
+          git push origin HEAD:slice/04-synchronization
