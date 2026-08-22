@@ -16,7 +16,7 @@ function repository(): MemoryRepository {
 }
 
 describe('StoreMemoryForm', () => {
-  it('reports success only after local persistence commits and clears the field', async () => {
+  it('reports local persistence without claiming synchronization and clears the field', async () => {
     const user = userEvent.setup();
     const local = repository();
     vi.mocked(local.create).mockResolvedValue({
@@ -31,7 +31,8 @@ describe('StoreMemoryForm', () => {
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(local.create).toHaveBeenCalledWith('  Minha irmã se chama Ana.  ');
-    expect(await screen.findByRole('status')).toHaveTextContent('Lembrança guardada.');
+    expect(await screen.findByRole('status')).toHaveTextContent('Salva neste dispositivo.');
+    expect(screen.queryByText(/^Sincronizada$/i)).not.toBeInTheDocument();
     expect(input).toHaveValue('');
   });
 
@@ -47,7 +48,7 @@ describe('StoreMemoryForm', () => {
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('armazenamento local');
-    expect(screen.queryByText('Lembrança guardada.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Salva neste dispositivo/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText('Lembrança')).toHaveValue('Registro sintético.');
   });
 
