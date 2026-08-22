@@ -27,7 +27,10 @@ export function StoreMemoryForm({
     try {
       await repository.create(text);
       setText('');
-      setMessage({ kind: 'success', text: 'Lembrança guardada.' });
+      setMessage({
+        kind: 'success',
+        text: 'Salva neste dispositivo. A sincronização ocorrerá quando disponível.',
+      });
     } catch (error) {
       if (error instanceof MemoryRepositoryError && error.code === 'LOCAL_STORAGE_UNAVAILABLE') {
         setMessage({
